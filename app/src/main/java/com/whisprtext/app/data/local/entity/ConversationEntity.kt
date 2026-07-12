@@ -1,0 +1,14 @@
+package com.whisprtext.app.data.local.entity
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "conversations")
+data class ConversationEntity(
+    @PrimaryKey val id: String,
+    val type: String, // "direct", "group"
+    val createdAt: Long,
+    val unreadCount: Int,
+    val lastMessageText: String?,
+    val lastMessageTime: Long?
+)

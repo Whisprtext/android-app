@@ -1,0 +1,64 @@
+package com.whisprtext.app
+
+import com.whisprtext.app.data.local.entity.ConversationEntity
+import com.whisprtext.app.data.repository.ChatRepository
+import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Before
+import org.junit.Test
+import org.mockito.Mockito.verify
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ConversationsViewModelTest {
+
+    private val testDispatcher = StandardTestDispatcher()
+    private val chatRepository: ChatRepository = mock()
+    private lateinit var viewModel: ConversationsViewModel
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+        val dummyList = listOf(
+            ConversationEntity("conv-1", "direct", 1000L, 0, "Last Msg", 1000L)
+        )
+        whenever(chatRepository.getConversations()).thenReturn(flowOf(dummyList))
+        viewModel = ConversationsViewModel(chatRepository)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun testInitialSyncAndListUpdate() = runTest {
+        val collectJob = launch(UnconfinedTestDispatcher()) {
+            viewModel.uiState.collect {}
+        }
+        runCurrent()
+        verify(chatRepository).syncConversations()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.conversations.size)
+        assertEquals("conv-1", state.conversations[0].id)
+        assertEquals(false, state.isLoading)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun testCreateConversationTriggersRepository() = runTest {
+        val collectJob = launch(UnconfinedTestDispatcher()) {
+            viewModel.uiState.collect {}
+        }
+        viewModel.createConversation(listOf("user-abc"))
+        runCurrent()
+        verify(chatRepository).createConversation("direct", listOf("user-abc"))
+        collectJob.cancel()
+    }
+}
