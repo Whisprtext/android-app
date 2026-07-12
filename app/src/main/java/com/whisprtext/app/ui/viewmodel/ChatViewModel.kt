@@ -47,6 +47,11 @@ class ChatViewModel(
                 _currentUserId.value = id ?: ""
             }
         }
+        viewModelScope.launch {
+            chatRepository.getMessages(conversationId).collect {
+                chatRepository.markConversationAsRead(conversationId)
+            }
+        }
         sync()
     }
 

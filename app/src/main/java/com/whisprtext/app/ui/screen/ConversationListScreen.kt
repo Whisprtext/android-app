@@ -25,11 +25,10 @@ import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 fun ConversationListScreen(
     viewModel: ConversationsViewModel,
     onConversationClick: (String) -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onAddContactClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showNewChatDialog by remember { mutableStateOf(false) }
-    var recipientUserId by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -46,7 +45,7 @@ fun ConversationListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showNewChatDialog = true }) {
+            FloatingActionButton(onClick = onAddContactClick) {
                 Icon(Icons.Default.Add, contentDescription = "New Chat")
             }
         }
@@ -92,43 +91,6 @@ fun ConversationListScreen(
                     Text(uiState.error ?: "")
                 }
             }
-        }
-
-        if (showNewChatDialog) {
-            AlertDialog(
-                onDismissRequest = { showNewChatDialog = false },
-                title = { Text("New Conversation") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Enter recipient user ID:")
-                        OutlinedTextField(
-                            value = recipientUserId,
-                            onValueChange = { recipientUserId = it },
-                            placeholder = { Text("UUID string") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            if (recipientUserId.isNotBlank()) {
-                                viewModel.createConversation(listOf(recipientUserId))
-                                recipientUserId = ""
-                                showNewChatDialog = false
-                            }
-                        }
-                    ) {
-                        Text("Create")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showNewChatDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
         }
     }
 }

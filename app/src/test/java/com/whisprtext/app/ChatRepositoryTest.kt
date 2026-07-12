@@ -26,13 +26,18 @@ class ChatRepositoryTest {
     private val conversationDao: ConversationDao = mock()
     private val messageDao: MessageDao = mock()
     private val apiClient: ApiClient = mock()
+    private val webSocketManager: com.whisprtext.app.data.remote.WebSocketManager = mock()
+    private val networkMonitor: com.whisprtext.app.util.NetworkMonitor = mock()
+    private val preferencesManager: com.whisprtext.app.data.local.PreferencesManager = mock()
     private lateinit var repository: ChatRepository
 
     @Before
     fun setUp() {
         whenever(database.conversationDao()).thenReturn(conversationDao)
         whenever(database.messageDao()).thenReturn(messageDao)
-        repository = ChatRepository(database, apiClient)
+        whenever(networkMonitor.isOnline).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(true))
+        whenever(webSocketManager.events).thenReturn(kotlinx.coroutines.flow.MutableSharedFlow())
+        repository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
 
     @Test

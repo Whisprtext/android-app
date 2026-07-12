@@ -208,14 +208,23 @@ fun MessageBubble(
                         color = textColor.copy(alpha = 0.6f)
                     )
                     if (isSelf) {
+                        val statusText = when (message.syncStatus) {
+                            "pending" -> "🕒"
+                            "failed" -> "✕"
+                            "sent" -> "✓"
+                            "delivered" -> "✓✓"
+                            "read" -> "✓✓✓"
+                            else -> "✓"
+                        }
+                        val statusColor = when (message.syncStatus) {
+                            "failed" -> androidx.compose.ui.graphics.Color.Red
+                            "read" -> androidx.compose.ui.graphics.Color(0xFF34B7F1)
+                            else -> textColor.copy(alpha = 0.6f)
+                        }
                         Text(
-                            text = when (message.syncStatus) {
-                                "sending" -> "●"
-                                "failed" -> "✕"
-                                else -> "✓"
-                            },
-                            fontSize = 10.sp,
-                            color = textColor.copy(alpha = 0.6f)
+                            text = statusText,
+                            fontSize = 11.sp,
+                            color = statusColor
                         )
                     }
                 }

@@ -7,4 +7,5 @@ sealed class Screen(val route: String) {
         fun createRoute(conversationId: String) = "chat/$conversationId"
     }
     object Settings : Screen("settings")
+    object ContactDiscovery : Screen("contact_discovery")
 }

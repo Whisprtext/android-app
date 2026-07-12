@@ -12,6 +12,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC")
     fun getMessagesForConversation(conversationId: String): Flow<List<MessageEntity>>
 
+    @Query("UPDATE messages SET syncStatus = 'read' WHERE conversationId = :conversationId AND senderId != :currentUserId AND syncStatus != 'read'")
+    suspend fun markConversationMessagesRead(conversationId: String, currentUserId: String): Unit
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: MessageEntity): Unit
 
@@ -20,4 +23,10 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE id = :id")
     suspend fun deleteById(id: String): Unit
+
+    @Query("SELECT * FROM messages WHERE syncStatus = :status")
+    suspend fun getMessagesBySyncStatus(status: String): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE id = :id")
+    suspend fun getById(id: String): MessageEntity?
 }

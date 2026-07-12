@@ -18,6 +18,13 @@ class SettingsViewModel(
     private val _userId = MutableStateFlow("")
     val userId: StateFlow<String> = _userId
 
+    val phoneNumber = MutableStateFlow<String?>(null)
+    val discoverableByUsername = MutableStateFlow(true)
+    val discoverableByPhone = MutableStateFlow(true)
+
+    private val _updateStatus = MutableSharedFlow<String>()
+    val updateStatus: SharedFlow<String> = _updateStatus
+
     init {
         viewModelScope.launch {
             preferencesManager.username.collect { name ->
@@ -27,6 +34,39 @@ class SettingsViewModel(
         viewModelScope.launch {
             preferencesManager.userId.collect { id ->
                 _userId.value = id ?: ""
+            }
+        }
+        fetchSettings()
+    }
+
+    fun fetchSettings() {
+        viewModelScope.launch {
+            try {
+                val response = apiClient.getMe()
+                phoneNumber.value = response.user.phoneNumber
+                discoverableByUsername.value = response.user.discoverableByUsername
+                discoverableByPhone.value = response.user.discoverableByPhone
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun saveSettings(phone: String?, discUser: Boolean, discPhone: Boolean) {
+        viewModelScope.launch {
+            try {
+                apiClient.updateSettings(
+                    phoneNumber = if (phone.isNullOrBlank()) null else phone,
+                    discoverableByUsername = discUser,
+                    discoverableByPhone = discPhone
+                )
+                phoneNumber.value = phone
+                discoverableByUsername.value = discUser
+                discoverableByPhone.value = discPhone
+                _updateStatus.emit("Settings saved successfully")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _updateStatus.emit("Failed to save settings: ${e.localizedMessage}")
             }
         }
     }

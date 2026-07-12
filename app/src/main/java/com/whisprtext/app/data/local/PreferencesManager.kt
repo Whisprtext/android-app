@@ -17,6 +17,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SESSION_TOKEN = stringPreferencesKey("session_token")
         private val KEY_USER_ID = stringPreferencesKey("user_id")
         private val KEY_USERNAME = stringPreferencesKey("username")
+        private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
     }
 
     val sessionToken: Flow<String?> = context.dataStore.data.map { preferences ->
@@ -31,6 +32,10 @@ class PreferencesManager(private val context: Context) {
         preferences[KEY_USERNAME]
     }
 
+    val lastSyncTime: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_LAST_SYNC_TIME]
+    }
+
     suspend fun saveSession(token: String, userId: String, username: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_SESSION_TOKEN] = token
@@ -39,11 +44,18 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun saveLastSyncTime(time: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_LAST_SYNC_TIME] = time
+        }
+    }
+
     suspend fun clearSession() {
         context.dataStore.edit { preferences ->
             preferences.remove(KEY_SESSION_TOKEN)
             preferences.remove(KEY_USER_ID)
             preferences.remove(KEY_USERNAME)
+            preferences.remove(KEY_LAST_SYNC_TIME)
         }
     }
 }

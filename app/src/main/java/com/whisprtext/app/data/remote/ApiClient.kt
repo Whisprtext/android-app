@@ -130,17 +130,66 @@ class ApiClient(
         return executeRequest(request)
     }
 
+    suspend fun searchUserByUsername(username: String): UserDto {
+        val urlBuilder = "$baseUrl/users/search".toHttpUrlOrNull()!!.newBuilder()
+        urlBuilder.addQueryParameter("username", username)
+
+        val request = Request.Builder()
+            .url(urlBuilder.build())
+            .get()
+            .build()
+
+        return executeRequest(request)
+    }
+
+    suspend fun lookupUsersByPhone(phoneNumbers: List<String>): List<UserDto> {
+        val json = gson.toJson(PhoneLookupRequest(phoneNumbers))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/users/lookup-by-phone")
+            .post(body)
+            .build()
+
+        val type = object : TypeToken<List<UserDto>>() {}.type
+        return executeRequest(request, type)
+    }
+
+    suspend fun updateSettings(
+        phoneNumber: String?,
+        discoverableByUsername: Boolean,
+        discoverableByPhone: Boolean
+    ): UserDto {
+        val json = gson.toJson(UpdateSettingsRequest(phoneNumber, discoverableByUsername, discoverableByPhone))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/me/settings")
+            .put(body)
+            .build()
+
+        return executeRequest(request)
+    }
+
+    suspend fun getMe(): MeResponse {
+        val request = Request.Builder()
+            .url("$baseUrl/me")
+            .get()
+            .build()
+
+        return executeRequest(request)
+    }
+
     private suspend inline fun <reified T> executeRequest(request: Request, type: java.lang.reflect.Type? = null): T = withContext(Dispatchers.IO) {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("Unexpected code ${response.code} with body: ${response.body?.string()}")
             }
             val body = response.body?.string() ?: throw IOException("Empty response body")
-            if (type != null) {
+            val result: T? = if (type != null) {
                 gson.fromJson(body, type)
             } else {
                 gson.fromJson(body, T::class.java)
             }
+            result ?: throw IOException("Parsed response is null")
         }
     }
 

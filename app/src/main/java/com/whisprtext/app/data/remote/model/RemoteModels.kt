@@ -1,7 +1,24 @@
 package com.whisprtext.app.data.remote.model
 
-data class UserDto(val id: String, val username: String)
+data class UserDto(
+    val id: String,
+    val username: String,
+    val phoneNumber: String? = null,
+    val discoverableByUsername: Boolean = true,
+    val discoverableByPhone: Boolean = true
+)
 data class DeviceDto(val id: String, val userId: String, val deviceName: String)
+
+data class PhoneLookupRequest(val phoneNumbers: List<String>)
+data class UpdateSettingsRequest(
+    val phoneNumber: String?,
+    val discoverableByUsername: Boolean,
+    val discoverableByPhone: Boolean
+)
+data class MeResponse(
+    val user: UserDto,
+    val device: DeviceDto
+)
 
 data class AuthResponse(
     val user: UserDto,

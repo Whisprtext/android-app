@@ -94,6 +94,9 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onSettingsClick = {
                                         navController.navigate(Screen.Settings.route)
+                                    },
+                                    onAddContactClick = {
+                                        navController.navigate(Screen.ContactDiscovery.route)
                                     }
                                 )
                             }
@@ -122,6 +125,22 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onLogoutSuccess = {
                                         // Handled automatically by the sessionToken flow observer
+                                    }
+                                )
+                            }
+
+                            composable(Screen.ContactDiscovery.route) {
+                                val contactDiscoveryViewModel = viewModelFactory {
+                                    com.whisprtext.app.ui.viewmodel.ContactDiscoveryViewModel(chatRepository)
+                                }
+                                com.whisprtext.app.ui.screen.ContactDiscoveryScreen(
+                                    viewModel = contactDiscoveryViewModel,
+                                    onBackClick = {
+                                        navController.popBackStack()
+                                    },
+                                    onChatCreated = { convId ->
+                                        navController.popBackStack()
+                                        navController.navigate(Screen.Chat.createRoute(convId))
                                     }
                                 )
                             }
