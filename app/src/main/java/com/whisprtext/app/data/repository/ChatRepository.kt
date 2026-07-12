@@ -129,16 +129,6 @@ class ChatRepository(
         }
     }
 
-    suspend fun loadOlderMessages(conversationId: String, oldestMessageTime: Long, limit: Int = 20) {
-        try {
-            val cursor = java.time.Instant.ofEpochMilli(oldestMessageTime).toString()
-            val remoteMessages = apiClient.getMessages(conversationId, cursor = cursor, direction = "older", limit = limit)
-            val entities = remoteMessages.map { it.toEntity("sent") }
-            upsertMessages(entities)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
 
     suspend fun sendMessage(conversationId: String, content: String, senderId: String, senderDeviceId: String) {
         val tempId = UUID.randomUUID().toString()
@@ -184,27 +174,35 @@ class ChatRepository(
     suspend fun syncDelta() {
         try {
             val since = preferencesManager.lastSyncTime.first()
+            // On first launch or after reinstall, since is null — fetch all messages & conversations.
+            if (since == null) {
+                syncConversations()
+            }
             val delta = apiClient.sync(since)
             val currentUserId = preferencesManager.userId.first()
-            
+
             if (delta.messages.isNotEmpty()) {
-                val entities = delta.messages.map { 
+                val entities = delta.messages.map {
                     val status = if (it.senderId == currentUserId) "sent" else "delivered"
-                    it.toEntity(status) 
+                    it.toEntity(status)
                 }
                 upsertMessages(entities)
-                
+
                 for (msg in delta.messages) {
                     if (msg.senderId != currentUserId) {
                         webSocketManager.markMessageDelivered(msg.id)
                     }
                 }
-                
+
                 val grouped = delta.messages.groupBy { it.conversationId }
                 for ((convId, msgs) in grouped) {
                     val latest = msgs.maxByOrNull { it.createdAt.toEpochMillis() }
                     val conv = conversationDao.getById(convId)
-                    if (conv != null && latest != null) {
+                    if (conv == null) {
+                        // Re-discover any conversation we don't have locally.
+                        syncConversations()
+                        break
+                    } else if (latest != null) {
                         conversationDao.insert(conv.copy(
                             lastMessageText = latest.encryptedContent,
                             lastMessageTime = latest.createdAt.toEpochMillis()

@@ -81,23 +81,6 @@ fun ChatScreen(
                                 isGroupFooter = isGroupFooter
                             )
                         }
-
-                        if (uiState.messages.isNotEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (uiState.isLoadingOlder) {
-                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                    } else {
-                                        TextButton(onClick = { viewModel.loadOlderMessages() }) {
-                                            Text("Load Older Messages", fontSize = 14.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
 

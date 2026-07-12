@@ -11,7 +11,6 @@ import kotlinx.coroutines.launch
 data class ChatUiState(
     val messages: List<MessageEntity> = emptyList(),
     val isLoading: Boolean = false,
-    val isLoadingOlder: Boolean = false,
     val error: String? = null
 )
 
@@ -22,16 +21,14 @@ class ChatViewModel(
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
-    private val _isLoadingOlder = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<ChatUiState> = combine(
         chatRepository.getMessages(conversationId),
         _isLoading,
-        _isLoadingOlder,
         _error
-    ) { messages, isLoading, isLoadingOlder, error ->
-        ChatUiState(messages, isLoading, isLoadingOlder, error)
+    ) { messages, isLoading, error ->
+        ChatUiState(messages, isLoading, error)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -65,24 +62,6 @@ class ChatViewModel(
                 _error.value = e.message ?: "Failed to sync messages"
             } finally {
                 _isLoading.value = false
-            }
-        }
-    }
-
-    fun loadOlderMessages() {
-        val currentMessages = uiState.value.messages
-        if (currentMessages.isEmpty() || _isLoadingOlder.value) return
-
-        viewModelScope.launch {
-            _isLoadingOlder.value = true
-            _error.value = null
-            try {
-                val oldestMessage = currentMessages.last()
-                chatRepository.loadOlderMessages(conversationId, oldestMessage.createdAt)
-            } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to load older messages"
-            } finally {
-                _isLoadingOlder.value = false
             }
         }
     }
