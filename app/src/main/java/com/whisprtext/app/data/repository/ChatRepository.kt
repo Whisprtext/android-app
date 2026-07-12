@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class ChatRepository(
     private val database: AppDatabase,
@@ -28,20 +29,28 @@ class ChatRepository(
     private val conversationDao = database.conversationDao()
     private val messageDao = database.messageDao()
     private val scope = CoroutineScope(ioDispatcher)
+    private var cachedUserId: String? = null
+    private val pendingReceipts = ConcurrentHashMap<String, String>()
 
     init {
+        scope.launch {
+            preferencesManager.userId.collect { id ->
+                cachedUserId = id
+            }
+        }
+
         // Collect real-time events from WebSocketManager
         scope.launch {
             webSocketManager.events.collect { event ->
+                val currentUserId = cachedUserId ?: preferencesManager.userId.first() ?: ""
                 when (event) {
                     is WebSocketEvent.NewMessage -> {
-                        val currentUserId = preferencesManager.userId.first()
                         if (event.message.senderId != currentUserId) {
                             webSocketManager.markMessageDelivered(event.message.id)
                         }
 
                         val entityStatus = if (event.message.senderId == currentUserId) "sent" else "delivered"
-                        messageDao.insert(event.message.toEntity(entityStatus))
+                        upsertMessage(event.message.toEntity(entityStatus))
                         
                         val conv = conversationDao.getById(event.message.conversationId)
                         if (conv != null) {
@@ -49,13 +58,16 @@ class ChatRepository(
                                 lastMessageText = event.message.encryptedContent,
                                 lastMessageTime = event.message.createdAt.toEpochMillis()
                             ))
+                        } else {
+                            scope.launch {
+                                syncConversations()
+                            }
                         }
                     }
                     is WebSocketEvent.Ack -> {
                         messageDao.deleteById(event.clientMsgId)
                     }
                     is WebSocketEvent.ReceiptUpdate -> {
-                        val currentUserId = preferencesManager.userId.first()
                         if (event.receipt.userId != currentUserId) {
                             updateMessageStatus(event.receipt.messageId, event.receipt.status)
                         }
@@ -100,7 +112,7 @@ class ChatRepository(
 
             val latestMessages = remoteSummaries.mapNotNull { it.lastMessage?.toEntity("sent") }
             if (latestMessages.isNotEmpty()) {
-                messageDao.insertAll(latestMessages)
+                upsertMessages(latestMessages)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -111,7 +123,7 @@ class ChatRepository(
         try {
             val remoteMessages = apiClient.getMessages(conversationId)
             val entities = remoteMessages.map { it.toEntity("sent") }
-            messageDao.insertAll(entities)
+            upsertMessages(entities)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -122,7 +134,7 @@ class ChatRepository(
             val cursor = java.time.Instant.ofEpochMilli(oldestMessageTime).toString()
             val remoteMessages = apiClient.getMessages(conversationId, cursor = cursor, direction = "older", limit = limit)
             val entities = remoteMessages.map { it.toEntity("sent") }
-            messageDao.insertAll(entities)
+            upsertMessages(entities)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -153,7 +165,7 @@ class ChatRepository(
         try {
             val response = apiClient.sendMessage(conversationId, content)
             messageDao.deleteById(tempId)
-            messageDao.insert(response.toEntity("sent"))
+            upsertMessage(response.toEntity("sent"))
 
             // Update conversation with exact server timestamp
             val updatedConv = conversationDao.getById(conversationId)
@@ -180,7 +192,7 @@ class ChatRepository(
                     val status = if (it.senderId == currentUserId) "sent" else "delivered"
                     it.toEntity(status) 
                 }
-                messageDao.insertAll(entities)
+                upsertMessages(entities)
                 
                 for (msg in delta.messages) {
                     if (msg.senderId != currentUserId) {
@@ -223,7 +235,7 @@ class ChatRepository(
                     messageDao.insert(msg.copy(syncStatus = "pending"))
                     val response = apiClient.sendMessage(msg.conversationId, msg.encryptedContent)
                     messageDao.deleteById(msg.id)
-                    messageDao.insert(response.toEntity("sent"))
+                    upsertMessage(response.toEntity("sent"))
 
                     val conv = conversationDao.getById(msg.conversationId)
                     if (conv != null) {
@@ -254,10 +266,33 @@ class ChatRepository(
     }
 
     private suspend fun updateMessageStatus(messageId: String, newStatus: String) {
-        val existing = messageDao.getById(messageId) ?: return
+        val existing = messageDao.getById(messageId)
+        if (existing == null) {
+            pendingReceipts[messageId] = newStatus
+            return
+        }
         if (getStatusPrecedence(newStatus) > getStatusPrecedence(existing.syncStatus)) {
             messageDao.insert(existing.copy(syncStatus = newStatus))
         }
+    }
+
+    private suspend fun upsertMessage(message: MessageEntity) {
+        var status = message.syncStatus
+        val pending = pendingReceipts.remove(message.id)
+        if (pending != null && getStatusPrecedence(pending) > getStatusPrecedence(status)) {
+            status = pending
+        }
+
+        val existing = messageDao.getById(message.id)
+        if (existing == null) {
+            messageDao.insert(message.copy(syncStatus = status))
+        } else if (getStatusPrecedence(status) > getStatusPrecedence(existing.syncStatus)) {
+            messageDao.insert(existing.copy(syncStatus = status))
+        }
+    }
+
+    private suspend fun upsertMessages(messages: List<MessageEntity>) {
+        messages.forEach { upsertMessage(it) }
     }
 
     suspend fun markConversationAsRead(conversationId: String) {

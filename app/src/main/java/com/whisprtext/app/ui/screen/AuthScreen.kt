@@ -83,9 +83,9 @@ fun AuthScreen(
                         if (username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading) {
                             Log.d("AuthScreen", "Done IME Action clicked: isLogin=$isLogin, username=$username")
                             if (isLogin) {
-                                viewModel.login(username, password, "Android Device")
+                                viewModel.login(username, password)
                             } else {
-                                viewModel.signup(username, password, "Android Device")
+                                viewModel.signup(username, password)
                             }
                         } else {
                             Log.d("AuthScreen", "Done IME Action clicked but fields invalid or loading: usernameBlank=${username.isBlank()}, passwordBlank=${password.isBlank()}, authState=$authState")
@@ -107,9 +107,9 @@ fun AuthScreen(
                 onClick = {
                     Log.d("AuthScreen", "Submit Button clicked: isLogin=$isLogin, username=$username")
                     if (isLogin) {
-                        viewModel.login(username, password, "Android Device")
+                        viewModel.login(username, password)
                     } else {
-                        viewModel.signup(username, password, "Android Device")
+                        viewModel.signup(username, password)
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),

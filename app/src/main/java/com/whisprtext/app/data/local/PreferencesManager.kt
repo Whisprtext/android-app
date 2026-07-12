@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "whisprtext_prefs")
@@ -18,10 +19,27 @@ class PreferencesManager(private val context: Context) {
         private val KEY_USER_ID = stringPreferencesKey("user_id")
         private val KEY_USERNAME = stringPreferencesKey("username")
         private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
+        private val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
     }
 
     val sessionToken: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_SESSION_TOKEN]
+    }
+
+    val deviceName: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_DEVICE_NAME]
+    }
+
+    suspend fun getOrCreateDeviceName(): String {
+        val existing = deviceName.first()
+        if (!existing.isNullOrEmpty()) {
+            return existing
+        }
+        val newName = "Android Device " + java.util.UUID.randomUUID().toString().take(6)
+        context.dataStore.edit { preferences ->
+            preferences[KEY_DEVICE_NAME] = newName
+        }
+        return newName
     }
 
     val userId: Flow<String?> = context.dataStore.data.map { preferences ->

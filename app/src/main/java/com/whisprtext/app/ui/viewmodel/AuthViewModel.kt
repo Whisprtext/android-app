@@ -25,13 +25,14 @@ class AuthViewModel(
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
 
-    fun login(username: String, passwordHash: String, deviceName: String) {
-        Log.d("AuthViewModel", "login() started: username=$username, deviceName=$deviceName")
+    fun login(username: String, passwordHash: String) {
+        Log.d("AuthViewModel", "login() started: username=$username")
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             try {
-                Log.d("AuthViewModel", "login() making API call to login")
-                val response = apiClient.login(username, passwordHash, deviceName)
+                val devName = preferencesManager.getOrCreateDeviceName()
+                Log.d("AuthViewModel", "login() making API call with device: $devName")
+                val response = apiClient.login(username, passwordHash, devName)
                 Log.d("AuthViewModel", "login() API call success: token=${response.sessionToken}")
                 preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username)
                 Log.d("AuthViewModel", "login() session saved successfully")
@@ -43,13 +44,14 @@ class AuthViewModel(
         }
     }
 
-    fun signup(username: String, passwordHash: String, deviceName: String) {
-        Log.d("AuthViewModel", "signup() started: username=$username, deviceName=$deviceName")
+    fun signup(username: String, passwordHash: String) {
+        Log.d("AuthViewModel", "signup() started: username=$username")
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             try {
-                Log.d("AuthViewModel", "signup() making API call to signup")
-                val response = apiClient.signup(username, passwordHash, deviceName)
+                val devName = preferencesManager.getOrCreateDeviceName()
+                Log.d("AuthViewModel", "signup() making API call with device: $devName")
+                val response = apiClient.signup(username, passwordHash, devName)
                 Log.d("AuthViewModel", "signup() API call success: token=${response.sessionToken}")
                 preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username)
                 Log.d("AuthViewModel", "signup() session saved successfully")
