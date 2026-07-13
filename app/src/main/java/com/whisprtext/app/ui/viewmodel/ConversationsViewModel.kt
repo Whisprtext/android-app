@@ -67,4 +67,32 @@ class ConversationsViewModel(
             }
         }
     }
+
+    fun deleteConversations(conversationIds: List<String>) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            try {
+                chatRepository.deleteConversations(conversationIds)
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Failed to delete conversations"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun deleteAllConversations() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            try {
+                chatRepository.deleteAllConversations()
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Failed to delete all conversations"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
 }

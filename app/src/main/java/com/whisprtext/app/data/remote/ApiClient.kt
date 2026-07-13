@@ -216,6 +216,22 @@ class ApiClient(
         return executeStatusRequest(request)
     }
 
+    suspend fun deleteConversation(conversationId: String): Boolean {
+        val request = Request.Builder()
+            .url("$baseUrl/conversations/$conversationId")
+            .delete()
+            .build()
+        return executeStatusRequest(request)
+    }
+
+    suspend fun deleteAllConversations(): Boolean {
+        val request = Request.Builder()
+            .url("$baseUrl/conversations")
+            .delete()
+            .build()
+        return executeStatusRequest(request)
+    }
+
     private suspend fun executeStatusRequest(request: Request): Boolean = withContext(Dispatchers.IO) {
         client.newCall(request).execute().use { response ->
             response.isSuccessful

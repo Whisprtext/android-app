@@ -400,4 +400,26 @@ class ChatRepository(
             messageDao.deleteById(messageId)
         }
     }
+
+    suspend fun deleteConversations(conversationIds: List<String>) {
+        conversationIds.forEach { id ->
+            try {
+                apiClient.deleteConversation(id)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            conversationDao.deleteById(id)
+            messageDao.deleteByConversationId(id)
+        }
+    }
+
+    suspend fun deleteAllConversations() {
+        try {
+            apiClient.deleteAllConversations()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        conversationDao.deleteAll()
+        messageDao.deleteAll()
+    }
 }

@@ -29,4 +29,10 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun getById(id: String): MessageEntity?
+
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
+    suspend fun deleteByConversationId(conversationId: String)
+
+    @Query("DELETE FROM messages")
+    suspend fun deleteAll()
 }

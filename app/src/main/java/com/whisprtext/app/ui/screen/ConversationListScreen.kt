@@ -1,7 +1,8 @@
 package com.whisprtext.app.ui.screen
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,19 +38,58 @@ fun ConversationListScreen(
     val context = LocalContext.current
     val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
 
+    var selectedConversationIds by remember { mutableStateOf(emptySet<String>()) }
+    val isSelectionMode = selectedConversationIds.isNotEmpty()
+    var showMenu by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Chats") },
-                actions = {
-                    IconButton(onClick = { viewModel.sync() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            if (isSelectionMode) {
+                TopAppBar(
+                    title = { Text("${selectedConversationIds.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { selectedConversationIds = emptySet() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear Selection")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            viewModel.deleteConversations(selectedConversationIds.toList())
+                            selectedConversationIds = emptySet()
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                        }
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Delete all chats") },
+                                onClick = {
+                                    showMenu = false
+                                    viewModel.deleteAllConversations()
+                                    selectedConversationIds = emptySet()
+                                }
+                            )
+                        }
                     }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Chats") },
+                    actions = {
+                        IconButton(onClick = { viewModel.sync() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                     }
-                }
-            )
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddContactClick) {
@@ -74,10 +117,28 @@ fun ConversationListScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(uiState.conversations) { conversation ->
+                        val isSelected = selectedConversationIds.contains(conversation.id)
                         ConversationItem(
                             conversation = conversation,
                             contactsMap = contactsMap,
-                            onClick = { onConversationClick(conversation.id) }
+                            isSelected = isSelected,
+                            isSelectionMode = isSelectionMode,
+                            onLongClick = {
+                                if (!isSelectionMode) {
+                                    selectedConversationIds = setOf(conversation.id)
+                                }
+                            },
+                            onClick = {
+                                if (isSelectionMode) {
+                                    selectedConversationIds = if (isSelected) {
+                                        selectedConversationIds - conversation.id
+                                    } else {
+                                        selectedConversationIds + conversation.id
+                                    }
+                                } else {
+                                    onConversationClick(conversation.id)
+                                }
+                            }
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 72.dp),
@@ -131,10 +192,14 @@ fun InitialsAvatar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationItem(
     conversation: ConversationEntity,
     contactsMap: Map<String, String>,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onLongClick: () -> Unit,
     onClick: () -> Unit
 ) {
     val displayName = remember(conversation, contactsMap) {
@@ -150,9 +215,22 @@ fun ConversationItem(
         }
     }
 
+    val backgroundColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    } else {
+        Color.Transparent
+    }
+
     ListItem(
         leadingContent = {
-            InitialsAvatar(id = displayName)
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() }
+                )
+            } else {
+                InitialsAvatar(id = displayName)
+            }
         },
         headlineContent = {
             Text(displayName)
@@ -168,7 +246,7 @@ fun ConversationItem(
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val timeStr = formatTime(conversation.lastMessageTime)
                 Text(timeStr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (conversation.unreadCount > 0) {
+                if (conversation.unreadCount > 0 && !isSelectionMode) {
                     Badge(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
@@ -178,7 +256,12 @@ fun ConversationItem(
                 }
             }
         },
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier
+            .background(backgroundColor)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     )
 }
 

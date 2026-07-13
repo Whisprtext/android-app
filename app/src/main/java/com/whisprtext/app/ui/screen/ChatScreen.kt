@@ -66,7 +66,10 @@ fun ChatScreen(
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .imePadding()
         ) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (uiState.isLoading && uiState.messages.isEmpty()) {

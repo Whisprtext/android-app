@@ -37,7 +37,10 @@ fun AuthScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .imePadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(
