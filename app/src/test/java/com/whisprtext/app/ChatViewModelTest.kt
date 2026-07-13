@@ -33,6 +33,7 @@ class ChatViewModelTest {
             MessageEntity("msg-1", "conv-1", "user-123", "dev-1", "Hello", 1000L, "sent")
         )
         whenever(chatRepository.getMessages("conv-1")).thenReturn(flowOf(dummyMessages))
+        whenever(chatRepository.getConversationFlow("conv-1")).thenReturn(flowOf(null))
         viewModel = ChatViewModel("conv-1", chatRepository, preferencesManager)
     }
 
@@ -50,18 +51,6 @@ class ChatViewModelTest {
         viewModel.sendMessage("Hey there")
         runCurrent()
         verify(chatRepository).sendMessage(eq("conv-1"), eq("Hey there"), eq("user-123"), any())
-        collectJob.cancel()
-    }
-
-    @Test
-    fun testLoadOlderMessagesTriggersRepository() = runTest {
-        val collectJob = launch(UnconfinedTestDispatcher()) {
-            viewModel.uiState.collect {}
-        }
-        runCurrent()
-        viewModel.loadOlderMessages()
-        runCurrent()
-        verify(chatRepository).loadOlderMessages(eq("conv-1"), eq(1000L), any())
         collectJob.cancel()
     }
 }

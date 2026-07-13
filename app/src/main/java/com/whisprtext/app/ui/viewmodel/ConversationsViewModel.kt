@@ -55,7 +55,11 @@ class ConversationsViewModel(
             _isLoading.value = true
             _error.value = null
             try {
-                chatRepository.createConversation("direct", members)
+                if (members.isNotEmpty()) {
+                    chatRepository.createDirectConversation(members.first(), null)
+                } else {
+                    chatRepository.createConversation("direct", members)
+                }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Failed to create conversation"
             } finally {

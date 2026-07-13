@@ -293,6 +293,8 @@ class ChatRepository(
         messages.forEach { upsertMessage(it) }
     }
 
+    fun getConversationFlow(id: String): Flow<ConversationEntity?> = conversationDao.getByIdFlow(id)
+
     suspend fun markConversationAsRead(conversationId: String) {
         val currentUserId = preferencesManager.userId.first() ?: return
         webSocketManager.markConversationRead(conversationId)
@@ -307,7 +309,27 @@ class ChatRepository(
             createdAt = response.createdAt.toEpochMillis(),
             unreadCount = 0,
             lastMessageText = null,
-            lastMessageTime = null
+            lastMessageTime = null,
+            title = response.displayName ?: response.username,
+            username = response.username,
+            phoneNumber = response.phoneNumber
+        )
+        conversationDao.insert(entity)
+        return entity
+    }
+
+    suspend fun createDirectConversation(targetUserId: String?, username: String?): ConversationEntity {
+        val response = apiClient.createDirectConversation(targetUserId, username)
+        val entity = ConversationEntity(
+            id = response.id,
+            type = response.type,
+            createdAt = response.createdAt.toEpochMillis(),
+            unreadCount = 0,
+            lastMessageText = null,
+            lastMessageTime = null,
+            title = response.displayName ?: response.username ?: targetUserId ?: username,
+            username = response.username,
+            phoneNumber = response.phoneNumber
         )
         conversationDao.insert(entity)
         return entity
@@ -318,8 +340,9 @@ class ChatRepository(
     suspend fun updateSettings(
         phoneNumber: String?,
         discoverableByUsername: Boolean,
-        discoverableByPhone: Boolean
-    ) = apiClient.updateSettings(phoneNumber, discoverableByUsername, discoverableByPhone)
+        discoverableByPhone: Boolean,
+        displayName: String? = null
+    ) = apiClient.updateSettings(phoneNumber, discoverableByUsername, discoverableByPhone, displayName)
 
     // Mapper utilities
     private fun ConversationSummaryDto.toEntity(): ConversationEntity {
@@ -329,7 +352,10 @@ class ChatRepository(
             createdAt = createdAt.toEpochMillis(),
             unreadCount = unreadCount,
             lastMessageText = lastMessage?.encryptedContent,
-            lastMessageTime = lastMessage?.createdAt?.toEpochMillis()
+            lastMessageTime = lastMessage?.createdAt?.toEpochMillis(),
+            title = displayName ?: username,
+            username = username,
+            phoneNumber = phoneNumber
         )
     }
 

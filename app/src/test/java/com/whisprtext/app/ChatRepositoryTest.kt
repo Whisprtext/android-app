@@ -37,6 +37,8 @@ class ChatRepositoryTest {
         whenever(database.messageDao()).thenReturn(messageDao)
         whenever(networkMonitor.isOnline).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(true))
         whenever(webSocketManager.events).thenReturn(kotlinx.coroutines.flow.MutableSharedFlow())
+        whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-123"))
+        whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
         repository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
 

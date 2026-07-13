@@ -114,7 +114,7 @@ class ContactDiscoveryTest {
     fun testStartChatSuccess() = runTest {
         val userDto = UserDto("uuid-bob", "bob", "+15555551234", true, true)
         val conversationEntity = ConversationEntity("conv-uuid", "direct", System.currentTimeMillis(), 0, null, null)
-        whenever(chatRepository.createConversation(eq("direct"), eq(listOf("uuid-bob")))).thenReturn(conversationEntity)
+        whenever(chatRepository.createDirectConversation(eq("uuid-bob"), anyOrNull())).thenReturn(conversationEntity)
 
         var createdConv: ConversationEntity? = null
         val job = launch {

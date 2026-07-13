@@ -10,5 +10,8 @@ data class ConversationEntity(
     val createdAt: Long,
     val unreadCount: Int,
     val lastMessageText: String?,
-    val lastMessageTime: Long?
+    val lastMessageTime: Long?,
+    val title: String? = null,
+    val username: String? = null,
+    val phoneNumber: String? = null
 )

@@ -44,6 +44,7 @@ class OfflineQueueRetryTest {
         whenever(networkMonitor.isOnline).thenReturn(isOnlineFlow)
         whenever(webSocketManager.events).thenReturn(wsEventsFlow)
         whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
+        whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-current"))
         
         // Mock default database response for failed messages query
         run {

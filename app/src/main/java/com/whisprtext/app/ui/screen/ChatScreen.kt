@@ -15,8 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
+import com.whisprtext.app.util.ContactHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,10 +30,30 @@ fun ChatScreen(
     val currentUserId by viewModel.currentUserId.collectAsState()
     var textMessage by remember { mutableStateOf("") }
 
+    val context = LocalContext.current
+    val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
+    val displayTitle = remember(uiState.conversation, contactsMap) {
+        val conversation = uiState.conversation
+        if (conversation != null) {
+            if (conversation.type == "direct") {
+                val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
+                if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
+                    contactsMap[normalizedPhone] ?: conversation.username ?: "Chat"
+                } else {
+                    conversation.username ?: "Chat"
+                }
+            } else {
+                conversation.title ?: "Chat"
+            }
+        } else {
+            "Chat"
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Chat: " + viewModel.conversationId.take(8)) },
+                title = { Text(displayTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")

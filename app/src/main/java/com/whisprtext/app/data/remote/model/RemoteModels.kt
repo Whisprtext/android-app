@@ -5,7 +5,8 @@ data class UserDto(
     val username: String,
     val phoneNumber: String? = null,
     val discoverableByUsername: Boolean = true,
-    val discoverableByPhone: Boolean = true
+    val discoverableByPhone: Boolean = true,
+    val displayName: String = ""
 )
 data class DeviceDto(val id: String, val userId: String, val deviceName: String)
 
@@ -13,7 +14,8 @@ data class PhoneLookupRequest(val phoneNumbers: List<String>)
 data class UpdateSettingsRequest(
     val phoneNumber: String?,
     val discoverableByUsername: Boolean,
-    val discoverableByPhone: Boolean
+    val discoverableByPhone: Boolean,
+    val displayName: String? = null
 )
 data class MeResponse(
     val user: UserDto,
@@ -29,7 +31,10 @@ data class AuthResponse(
 data class ConversationDto(
     val id: String,
     val type: String,
-    val createdAt: String
+    val createdAt: String,
+    val displayName: String? = null,
+    val username: String? = null,
+    val phoneNumber: String? = null
 )
 
 data class ConversationSummaryDto(
@@ -37,7 +42,10 @@ data class ConversationSummaryDto(
     val type: String,
     val createdAt: String,
     val unreadCount: Int,
-    val lastMessage: MessageDto?
+    val lastMessage: MessageDto?,
+    val displayName: String? = null,
+    val username: String? = null,
+    val phoneNumber: String? = null
 )
 
 data class MessageDto(

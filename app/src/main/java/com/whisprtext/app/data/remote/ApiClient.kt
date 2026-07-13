@@ -78,6 +78,20 @@ class ApiClient(
         return executeRequest(request)
     }
 
+    suspend fun createDirectConversation(targetUserId: String?, username: String?): ConversationDto {
+        val params = mutableMapOf<String, String>()
+        if (targetUserId != null) params["target_user_id"] = targetUserId
+        if (username != null) params["username"] = username
+        val json = gson.toJson(params)
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/conversations/direct")
+            .post(body)
+            .build()
+
+        return executeRequest(request)
+    }
+
     suspend fun getConversations(cursor: String? = null, limit: Int? = null): List<ConversationSummaryDto> {
         val urlBuilder = "$baseUrl/conversations".toHttpUrlOrNull()!!.newBuilder()
         if (cursor != null) urlBuilder.addQueryParameter("cursor", cursor)
@@ -157,9 +171,10 @@ class ApiClient(
     suspend fun updateSettings(
         phoneNumber: String?,
         discoverableByUsername: Boolean,
-        discoverableByPhone: Boolean
+        discoverableByPhone: Boolean,
+        displayName: String? = null
     ): UserDto {
-        val json = gson.toJson(UpdateSettingsRequest(phoneNumber, discoverableByUsername, discoverableByPhone))
+        val json = gson.toJson(UpdateSettingsRequest(phoneNumber, discoverableByUsername, discoverableByPhone, displayName))
         val body = json.toRequestBody(jsonMediaType)
         val request = Request.Builder()
             .url("$baseUrl/me/settings")

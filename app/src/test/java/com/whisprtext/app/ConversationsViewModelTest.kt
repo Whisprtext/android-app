@@ -58,7 +58,7 @@ class ConversationsViewModelTest {
         }
         viewModel.createConversation(listOf("user-abc"))
         runCurrent()
-        verify(chatRepository).createConversation("direct", listOf("user-abc"))
+        verify(chatRepository).createDirectConversation("user-abc", null)
         collectJob.cancel()
     }
 }

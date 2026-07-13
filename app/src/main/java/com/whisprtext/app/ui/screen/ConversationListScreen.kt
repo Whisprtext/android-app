@@ -17,8 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
+import com.whisprtext.app.util.ContactHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +31,8 @@ fun ConversationListScreen(
     onAddContactClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
 
     Scaffold(
         topBar = {
@@ -70,7 +74,11 @@ fun ConversationListScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(uiState.conversations) { conversation ->
-                        ConversationItem(conversation, onClick = { onConversationClick(conversation.id) })
+                        ConversationItem(
+                            conversation = conversation,
+                            contactsMap = contactsMap,
+                            onClick = { onConversationClick(conversation.id) }
+                        )
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 72.dp),
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -126,14 +134,28 @@ fun InitialsAvatar(
 @Composable
 fun ConversationItem(
     conversation: ConversationEntity,
+    contactsMap: Map<String, String>,
     onClick: () -> Unit
 ) {
+    val displayName = remember(conversation, contactsMap) {
+        if (conversation.type == "direct") {
+            val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
+            if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
+                contactsMap[normalizedPhone] ?: conversation.username ?: "Chat"
+            } else {
+                conversation.username ?: "Chat"
+            }
+        } else {
+            conversation.title ?: "Chat"
+        }
+    }
+
     ListItem(
         leadingContent = {
-            InitialsAvatar(id = conversation.id)
+            InitialsAvatar(id = displayName)
         },
         headlineContent = {
-            Text("Chat with: " + conversation.id.take(8))
+            Text(displayName)
         },
         supportingContent = {
             Text(

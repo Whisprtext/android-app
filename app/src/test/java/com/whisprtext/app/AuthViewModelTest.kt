@@ -9,6 +9,7 @@ import com.whisprtext.app.ui.viewmodel.AuthState
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -37,6 +38,9 @@ class AuthViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        runBlocking {
+            whenever(preferencesManager.getOrCreateDeviceName()).thenReturn("Android Phone")
+        }
         viewModel = AuthViewModel(apiClient, preferencesManager)
     }
 
@@ -54,7 +58,7 @@ class AuthViewModelTest {
         )
         whenever(apiClient.login("alice", "password", "Android Phone")).thenReturn(dummyResponse)
 
-        viewModel.login("alice", "password", "Android Phone")
+        viewModel.login("alice", "password")
 
         runCurrent()
 
@@ -66,7 +70,7 @@ class AuthViewModelTest {
     fun testLoginFailureTransitions() = runTest {
         whenever(apiClient.login(any(), any(), any())).thenThrow(RuntimeException("Connection failed"))
 
-        viewModel.login("alice", "password", "Android Phone")
+        viewModel.login("alice", "password")
 
         runCurrent()
 

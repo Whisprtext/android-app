@@ -115,11 +115,10 @@ class RealtimeMergeTest {
 
         repository.syncDelta()
 
-        // Verify messages insertAll is invoked
-        val listCaptor = argumentCaptor<List<MessageEntity>>()
-        verify(messageDao).insertAll(listCaptor.capture())
-        assert(listCaptor.firstValue.size == 1)
-        assert(listCaptor.firstValue[0].id == "msg-abc")
+        // Verify messages insert is invoked
+        val msgCaptor = argumentCaptor<MessageEntity>()
+        verify(messageDao).insert(msgCaptor.capture())
+        assert(msgCaptor.firstValue.id == "msg-abc")
 
         // Verify lastSyncTime key is updated
         verify(preferencesManager).saveLastSyncTime("2026-07-12T12:05:00Z")
