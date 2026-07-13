@@ -19,6 +19,7 @@ sealed class WebSocketEvent {
     data class Ack(val clientMsgId: String, val messageId: String, val status: String) : WebSocketEvent()
     data class ReceiptUpdate(val receipt: ReceiptDto) : WebSocketEvent()
     data class Error(val clientMsgId: String?, val message: String) : WebSocketEvent()
+    data class MessageDeleted(val messageId: String, val conversationId: String) : WebSocketEvent()
     object Connected : WebSocketEvent()
     object Disconnected : WebSocketEvent()
 }
@@ -87,6 +88,13 @@ class WebSocketManager(
                             val dataJson = gson.toJson(wrapper.data)
                             val errData = gson.fromJson(dataJson, ErrorData::class.java)
                             WebSocketEvent.Error(wrapper.client_msg_id, errData.message)
+                        }
+                        "message_deleted" -> {
+                            val dataJson = gson.toJson(wrapper.data)
+                            val map = gson.fromJson(dataJson, Map::class.java)
+                            val messageId = map["message_id"] as? String ?: ""
+                            val conversationId = map["conversation_id"] as? String ?: ""
+                            WebSocketEvent.MessageDeleted(messageId, conversationId)
                         }
                         else -> null
                     }

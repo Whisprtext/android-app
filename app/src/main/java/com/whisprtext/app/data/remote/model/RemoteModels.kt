@@ -67,5 +67,6 @@ data class ReceiptDto(
 data class DeltaSyncDto(
     val messages: List<MessageDto>,
     val receipts: List<ReceiptDto>,
+    val deletedMessageIds: List<String> = emptyList(),
     val currentTime: String
 )

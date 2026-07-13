@@ -72,6 +72,9 @@ class ChatRepository(
                             updateMessageStatus(event.receipt.messageId, event.receipt.status)
                         }
                     }
+                    is WebSocketEvent.MessageDeleted -> {
+                        messageDao.deleteById(event.messageId)
+                    }
                     else -> {}
                 }
             }
@@ -216,6 +219,12 @@ class ChatRepository(
                     if (receipt.userId != currentUserId) {
                         updateMessageStatus(receipt.messageId, receipt.status)
                     }
+                }
+            }
+
+            if (delta.deletedMessageIds.isNotEmpty()) {
+                for (id in delta.deletedMessageIds) {
+                    messageDao.deleteById(id)
                 }
             }
 
@@ -376,6 +385,19 @@ class ChatRepository(
             java.time.Instant.parse(this).toEpochMilli()
         } catch (e: Exception) {
             System.currentTimeMillis()
+        }
+    }
+
+    suspend fun deleteMessage(messageId: String, forEveryone: Boolean) {
+        if (forEveryone) {
+            val success = apiClient.deleteMessageForEveryone(messageId)
+            if (success) {
+                messageDao.deleteById(messageId)
+            } else {
+                throw Exception("Failed to delete message on the server")
+            }
+        } else {
+            messageDao.deleteById(messageId)
         }
     }
 }

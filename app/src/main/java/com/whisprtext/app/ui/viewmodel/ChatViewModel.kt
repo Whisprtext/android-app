@@ -83,4 +83,18 @@ class ChatViewModel(
             }
         }
     }
+
+    fun deleteMessage(messageId: String, forEveryone: Boolean) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            try {
+                chatRepository.deleteMessage(messageId, forEveryone)
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Failed to delete message"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
 }

@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.platform.LocalContext
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
@@ -29,6 +31,7 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     var textMessage by remember { mutableStateOf("") }
+    var messageToDelete by remember { mutableStateOf<MessageEntity?>(null) }
 
     val context = LocalContext.current
     val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
@@ -100,7 +103,8 @@ fun ChatScreen(
                                 message = message,
                                 isSelf = isSelf,
                                 isGroupHeader = isGroupHeader,
-                                isGroupFooter = isGroupFooter
+                                isGroupFooter = isGroupFooter,
+                                onLongClick = { messageToDelete = message }
                             )
                         }
                     }
@@ -153,14 +157,50 @@ fun ChatScreen(
             }
         }
     }
+
+    if (messageToDelete != null) {
+        val msg = messageToDelete!!
+        val isSelf = msg.senderId == currentUserId
+        AlertDialog(
+            onDismissRequest = { messageToDelete = null },
+            title = { Text("Delete message?") },
+            text = { Text("Do you want to delete this message?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMessage(msg.id, forEveryone = false)
+                    messageToDelete = null
+                }) {
+                    Text("Delete for Me")
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (isSelf) {
+                        TextButton(onClick = {
+                            viewModel.deleteMessage(msg.id, forEveryone = true)
+                            messageToDelete = null
+                        }) {
+                            Text("Delete for Everyone", color = MaterialTheme.colorScheme.error)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    TextButton(onClick = { messageToDelete = null }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: MessageEntity,
     isSelf: Boolean,
     isGroupHeader: Boolean,
-    isGroupFooter: Boolean
+    isGroupFooter: Boolean,
+    onLongClick: () -> Unit
 ) {
     val bubbleColor = if (isSelf) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isSelf) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
@@ -195,6 +235,10 @@ fun MessageBubble(
             modifier = Modifier
                 .clip(bubbleShape)
                 .background(bubbleColor)
+                .combinedClickable(
+                    onLongClick = onLongClick,
+                    onClick = {}
+                )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Column {

@@ -208,6 +208,14 @@ class ApiClient(
         }
     }
 
+    suspend fun deleteMessageForEveryone(messageId: String): Boolean {
+        val request = Request.Builder()
+            .url("$baseUrl/messages/$messageId")
+            .delete()
+            .build()
+        return executeStatusRequest(request)
+    }
+
     private suspend fun executeStatusRequest(request: Request): Boolean = withContext(Dispatchers.IO) {
         client.newCall(request).execute().use { response ->
             response.isSuccessful
