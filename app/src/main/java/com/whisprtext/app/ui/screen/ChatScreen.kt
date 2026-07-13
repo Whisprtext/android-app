@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.TextLayoutResult
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.util.ContactHelper
@@ -69,6 +71,7 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
                 .imePadding()
         ) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -128,15 +131,20 @@ fun ChatScreen(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.Bottom
             ) {
                 OutlinedTextField(
                     value = textMessage,
                     onValueChange = { textMessage = it },
                     placeholder = { Text("Enter message...") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                    modifier = Modifier
+                        .weight(1f),
+                    singleLine = false,
+                    maxLines = 5,
+                    shape = RoundedCornerShape(24.dp)
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -150,6 +158,7 @@ fun ChatScreen(
                         }
                     },
                     enabled = isSendEnabled,
+                    modifier = Modifier.padding(bottom = 4.dp),
                     colors = IconButtonDefaults.iconButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary,
                         disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -225,17 +234,9 @@ fun MessageBubble(
         modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
         horizontalAlignment = alignment
     ) {
-        if (!isSelf && isGroupHeader) {
-            Text(
-                text = "Sender: " + message.senderId.take(4),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)
-            )
-        }
-
         Box(
             modifier = Modifier
+                .fillMaxWidth(0.9f)
                 .clip(bubbleShape)
                 .background(bubbleColor)
                 .combinedClickable(
@@ -244,39 +245,92 @@ fun MessageBubble(
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Column {
-                Text(text = message.encryptedContent, color = textColor, fontSize = 16.sp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    val timeInstant = java.time.Instant.ofEpochMilli(message.createdAt)
-                    val timeStr = java.time.LocalDateTime.ofInstant(timeInstant, java.time.ZoneId.systemDefault())
-                        .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+            var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+            Layout(
+                content = {
                     Text(
-                        text = timeStr,
-                        fontSize = 10.sp,
-                        color = textColor.copy(alpha = 0.6f)
+                        text = message.encryptedContent,
+                        color = textColor,
+                        fontSize = 16.sp,
+                        onTextLayout = { textLayoutResult = it }
                     )
-                    if (isSelf) {
-                        val statusText = when (message.syncStatus) {
-                            "pending" -> "🕒"
-                            "failed" -> "✕"
-                            "sent" -> "✓"
-                            "delivered" -> "✓✓"
-                            "read" -> "✓✓✓"
-                            else -> "✓"
-                        }
-                        val statusColor = when (message.syncStatus) {
-                            "failed" -> androidx.compose.ui.graphics.Color.Red
-                            "read" -> androidx.compose.ui.graphics.Color(0xFF34B7F1)
-                            else -> textColor.copy(alpha = 0.6f)
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val timeInstant = java.time.Instant.ofEpochMilli(message.createdAt)
+                        val timeStr = java.time.LocalDateTime.ofInstant(timeInstant, java.time.ZoneId.systemDefault())
+                            .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
                         Text(
-                            text = statusText,
-                            fontSize = 11.sp,
-                            color = statusColor
+                            text = timeStr,
+                            fontSize = 10.sp,
+                            color = textColor.copy(alpha = 0.6f)
+                        )
+                        if (isSelf) {
+                            val statusText = when (message.syncStatus) {
+                                "pending" -> "🕒"
+                                "failed" -> "✕"
+                                "sent" -> "✓"
+                                "delivered" -> "✓✓"
+                                "read" -> "✓✓✓"
+                                else -> "✓"
+                            }
+                            val statusColor = when (message.syncStatus) {
+                                "failed" -> androidx.compose.ui.graphics.Color.Red
+                                "read" -> androidx.compose.ui.graphics.Color(0xFF34B7F1)
+                                else -> textColor.copy(alpha = 0.6f)
+                            }
+                            Text(
+                                text = statusText,
+                                fontSize = 11.sp,
+                                color = statusColor
+                            )
+                        }
+                    }
+                }
+            ) { measurables, constraints ->
+                val textPlaceable = measurables[0].measure(constraints)
+                val timePlaceable = measurables[1].measure(constraints.copy(minWidth = 0))
+
+                val parentWidth = constraints.maxWidth
+
+                // Retrieve text layout details
+                val layoutResult = textLayoutResult
+                val lineCount = layoutResult?.lineCount ?: 0
+                
+                // If we have text layout info, we can determine the last line width
+                val lastLineRight = if (lineCount > 0) layoutResult?.getLineRight(lineCount - 1) ?: 0f else 0f
+                val lastLineLeft = if (lineCount > 0) layoutResult?.getLineLeft(lineCount - 1) ?: 0f else 0f
+                val lastLineWidth = lastLineRight - lastLineLeft
+
+                val spacingPx = (8 * density).toInt()
+                
+                // We check if it fits on the last line.
+                // It fits if the last line width + spacing + timestamp width is <= parentWidth
+                val fitsOnLastLine = lineCount > 0 && (lastLineWidth + spacingPx + timePlaceable.width <= parentWidth)
+
+                // Calculate height
+                val layoutHeight = if (fitsOnLastLine) {
+                    maxOf(textPlaceable.height, timePlaceable.height)
+                } else {
+                    textPlaceable.height + timePlaceable.height
+                }
+
+                layout(parentWidth, layoutHeight) {
+                    // Place the text at the top-left
+                    textPlaceable.placeRelative(0, 0)
+
+                    // Place the timestamp at the bottom-right of the layout
+                    if (fitsOnLastLine) {
+                        timePlaceable.placeRelative(
+                            x = parentWidth - timePlaceable.width,
+                            y = layoutHeight - timePlaceable.height
+                        )
+                    } else {
+                        timePlaceable.placeRelative(
+                            x = parentWidth - timePlaceable.width,
+                            y = textPlaceable.height
                         )
                     }
                 }
