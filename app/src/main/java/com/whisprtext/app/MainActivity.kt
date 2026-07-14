@@ -51,6 +51,16 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        (application as? WhisprTextApp)?.chatRepository?.isAppInForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (application as? WhisprTextApp)?.chatRepository?.isAppInForeground = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
