@@ -6,7 +6,10 @@ data class UserDto(
     val phoneNumber: String? = null,
     val discoverableByUsername: Boolean = true,
     val discoverableByPhone: Boolean = true,
-    val displayName: String = ""
+    val displayName: String = "",
+    val bio: String = "",
+    val avatarUrl: String = "",
+    val phoneNumberVisibility: String = "everyone"
 )
 data class DeviceDto(val id: String, val userId: String, val deviceName: String)
 
@@ -15,7 +18,14 @@ data class UpdateSettingsRequest(
     val phoneNumber: String?,
     val discoverableByUsername: Boolean,
     val discoverableByPhone: Boolean,
-    val displayName: String? = null
+    val displayName: String? = null,
+    val phoneNumberVisibility: String? = null
+)
+data class UpdateProfileRequest(
+    val username: String,
+    val displayName: String,
+    val bio: String,
+    val avatarUrl: String
 )
 data class MeResponse(
     val user: UserDto,

@@ -62,6 +62,12 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun saveUsername(username: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_USERNAME] = username
+        }
+    }
+
     suspend fun saveLastSyncTime(time: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_LAST_SYNC_TIME] = time

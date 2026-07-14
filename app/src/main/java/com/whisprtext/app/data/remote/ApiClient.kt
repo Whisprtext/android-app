@@ -172,12 +172,29 @@ class ApiClient(
         phoneNumber: String?,
         discoverableByUsername: Boolean,
         discoverableByPhone: Boolean,
-        displayName: String? = null
+        displayName: String? = null,
+        phoneNumberVisibility: String? = null
     ): UserDto {
-        val json = gson.toJson(UpdateSettingsRequest(phoneNumber, discoverableByUsername, discoverableByPhone, displayName))
+        val json = gson.toJson(UpdateSettingsRequest(phoneNumber, discoverableByUsername, discoverableByPhone, displayName, phoneNumberVisibility))
         val body = json.toRequestBody(jsonMediaType)
         val request = Request.Builder()
             .url("$baseUrl/me/settings")
+            .put(body)
+            .build()
+
+        return executeRequest(request)
+    }
+
+    suspend fun updateProfile(
+        username: String,
+        displayName: String,
+        bio: String,
+        avatarUrl: String
+    ): UserDto {
+        val json = gson.toJson(UpdateProfileRequest(username, displayName, bio, avatarUrl))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/me/profile")
             .put(body)
             .build()
 

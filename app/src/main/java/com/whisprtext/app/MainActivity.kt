@@ -25,11 +25,13 @@ import com.whisprtext.app.ui.screen.AuthScreen
 import com.whisprtext.app.ui.screen.ChatScreen
 import com.whisprtext.app.ui.screen.ConversationListScreen
 import com.whisprtext.app.ui.screen.SettingsScreen
+import com.whisprtext.app.ui.screen.ProfileScreen
 import com.whisprtext.app.ui.theme.WhisrtextTheme
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 import com.whisprtext.app.ui.viewmodel.SettingsViewModel
+import com.whisprtext.app.ui.viewmodel.ProfileViewModel
 
 import android.util.Log
 
@@ -123,8 +125,23 @@ class MainActivity : ComponentActivity() {
                                     onBackClick = {
                                         navController.popBackStack()
                                     },
+                                    onProfileClick = {
+                                        navController.navigate(Screen.Profile.route)
+                                    },
                                     onLogoutSuccess = {
                                         // Handled automatically by the sessionToken flow observer
+                                    }
+                                )
+                            }
+
+                            composable(Screen.Profile.route) {
+                                val profileViewModel = viewModelFactory {
+                                    ProfileViewModel(apiClient, preferencesManager)
+                                }
+                                ProfileScreen(
+                                    viewModel = profileViewModel,
+                                    onBackClick = {
+                                        navController.popBackStack()
                                     }
                                 )
                             }

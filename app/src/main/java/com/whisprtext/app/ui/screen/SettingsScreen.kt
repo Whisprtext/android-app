@@ -1,5 +1,6 @@
 package com.whisprtext.app.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -16,6 +17,7 @@ import com.whisprtext.app.ui.viewmodel.SettingsViewModel
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onBackClick: () -> Unit,
+    onProfileClick: () -> Unit,
     onLogoutSuccess: () -> Unit
 ) {
     val username by viewModel.username.collectAsState()
@@ -60,13 +62,35 @@ fun SettingsScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onProfileClick() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Profile & Privacy Settings", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Edit name, username, bio, avatar, and visibility settings",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text("›", fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Card(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("User Profile", style = MaterialTheme.typography.titleMedium)
+                    Text("User Profile Summary", style = MaterialTheme.typography.titleMedium)
                     HorizontalDivider()
                     Text("Username: $username", fontSize = 16.sp)
                     Text("User ID: $userId", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

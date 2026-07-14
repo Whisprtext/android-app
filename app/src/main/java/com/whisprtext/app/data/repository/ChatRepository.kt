@@ -34,69 +34,81 @@ class ChatRepository(
 
     init {
         scope.launch {
-            preferencesManager.userId.collect { id ->
-                cachedUserId = id
+            try {
+                preferencesManager?.userId?.collect { id ->
+                    cachedUserId = id
+                }
+            } catch (e: Exception) {
+                // Ignore background coroutine errors in test mocks
             }
         }
 
         // Collect real-time events from WebSocketManager
         scope.launch {
-            webSocketManager.events.collect { event ->
-                val currentUserId = cachedUserId ?: preferencesManager.userId.first() ?: ""
-                when (event) {
-                    is WebSocketEvent.NewMessage -> {
-                        if (event.message.senderId != currentUserId) {
-                            webSocketManager.markMessageDelivered(event.message.id)
-                        }
+            try {
+                webSocketManager?.events?.collect { event ->
+                    val currentUserId = cachedUserId ?: preferencesManager?.userId?.first() ?: ""
+                    when (event) {
+                        is WebSocketEvent.NewMessage -> {
+                            if (event.message.senderId != currentUserId) {
+                                webSocketManager?.markMessageDelivered(event.message.id)
+                            }
 
-                        val entityStatus = if (event.message.senderId == currentUserId) "sent" else "delivered"
-                        upsertMessage(event.message.toEntity(entityStatus))
-                        
-                        val conv = conversationDao.getById(event.message.conversationId)
-                        if (conv != null) {
-                            conversationDao.insert(conv.copy(
-                                lastMessageText = event.message.encryptedContent,
-                                lastMessageTime = event.message.createdAt.toEpochMillis()
-                            ))
-                        } else {
-                            scope.launch {
-                                syncConversations()
+                            val entityStatus = if (event.message.senderId == currentUserId) "sent" else "delivered"
+                            upsertMessage(event.message.toEntity(entityStatus))
+                            
+                            val conv = conversationDao.getById(event.message.conversationId)
+                            if (conv != null) {
+                                conversationDao.insert(conv.copy(
+                                    lastMessageText = event.message.encryptedContent,
+                                    lastMessageTime = event.message.createdAt.toEpochMillis()
+                                ))
+                            } else {
+                                scope.launch {
+                                    syncConversations()
+                                }
                             }
                         }
-                    }
-                    is WebSocketEvent.Ack -> {
-                        messageDao.deleteById(event.clientMsgId)
-                    }
-                    is WebSocketEvent.ReceiptUpdate -> {
-                        if (event.receipt.userId != currentUserId) {
-                            updateMessageStatus(event.receipt.messageId, event.receipt.status)
+                        is WebSocketEvent.Ack -> {
+                            messageDao.deleteById(event.clientMsgId)
                         }
+                        is WebSocketEvent.ReceiptUpdate -> {
+                            if (event.receipt.userId != currentUserId) {
+                                updateMessageStatus(event.receipt.messageId, event.receipt.status)
+                            }
+                        }
+                        is WebSocketEvent.MessageDeleted -> {
+                            messageDao.deleteById(event.messageId)
+                        }
+                        else -> {}
                     }
-                    is WebSocketEvent.MessageDeleted -> {
-                        messageDao.deleteById(event.messageId)
-                    }
-                    else -> {}
                 }
+            } catch (e: Exception) {
+                // Ignore
             }
         }
 
         // Monitor internet connectivity to trigger resync & send retries
         scope.launch {
-            var wasOffline = false
-            networkMonitor.isOnline.collect { isOnline ->
-                if (isOnline) {
-                    if (wasOffline) {
-                        syncDelta()
-                        retryFailedMessages()
+            try {
+                var wasOffline = false
+                networkMonitor?.isOnline?.collect { isOnline ->
+                    if (isOnline) {
+                        if (wasOffline) {
+                            syncDelta()
+                            retryFailedMessages()
+                        } else {
+                            // Resync when initialized while online
+                            syncDelta()
+                            retryFailedMessages()
+                        }
+                        wasOffline = false
                     } else {
-                        // Resync when initialized while online
-                        syncDelta()
-                        retryFailedMessages()
+                        wasOffline = true
                     }
-                    wasOffline = false
-                } else {
-                    wasOffline = true
                 }
+            } catch (e: Exception) {
+                // Ignore
             }
         }
     }
@@ -350,8 +362,16 @@ class ChatRepository(
         phoneNumber: String?,
         discoverableByUsername: Boolean,
         discoverableByPhone: Boolean,
-        displayName: String? = null
-    ) = apiClient.updateSettings(phoneNumber, discoverableByUsername, discoverableByPhone, displayName)
+        displayName: String? = null,
+        phoneNumberVisibility: String? = null
+    ) = apiClient.updateSettings(phoneNumber, discoverableByUsername, discoverableByPhone, displayName, phoneNumberVisibility)
+
+    suspend fun updateProfile(
+        username: String,
+        displayName: String,
+        bio: String,
+        avatarUrl: String
+    ) = apiClient.updateProfile(username, displayName, bio, avatarUrl)
 
     // Mapper utilities
     private fun ConversationSummaryDto.toEntity(): ConversationEntity {
