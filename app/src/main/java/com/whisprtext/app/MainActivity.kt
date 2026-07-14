@@ -36,12 +36,30 @@ import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 import com.whisprtext.app.ui.viewmodel.SettingsViewModel
 import com.whisprtext.app.ui.viewmodel.ProfileViewModel
 
+import android.content.Intent
+import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
 import android.util.Log
 
+import kotlinx.coroutines.flow.first
+
 class MainActivity : ComponentActivity() {
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
         
         val app = application as WhisprTextApp
         val preferencesManager = app.preferencesManager
@@ -59,6 +77,18 @@ class MainActivity : ComponentActivity() {
                         Log.d("MainActivity", "LaunchedEffect observed sessionToken: '$token'")
                         sessionToken = token
                         isSessionLoaded = true
+                    }
+                }
+
+                LaunchedEffect(sessionToken) {
+                    if (sessionToken != null) {
+                        try {
+                            val userId = preferencesManager.userId.first() ?: "unknown"
+                            val mockToken = "mock_token_" + userId.take(8)
+                            chatRepository.registerPushToken(mockToken)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 }
 
@@ -84,6 +114,17 @@ class MainActivity : ComponentActivity() {
                         )
                     } else {
                         val navController = rememberNavController()
+
+                        LaunchedEffect(intent) {
+                            val convId = intent?.getStringExtra("conversationId")
+                            if (!convId.isNullOrEmpty()) {
+                                navController.navigate(Screen.Chat.createRoute(convId)) {
+                                    popUpTo(Screen.ConversationList.route)
+                                }
+                                intent?.removeExtra("conversationId")
+                            }
+                        }
+
                         NavHost(
                             navController = navController,
                             startDestination = Screen.ConversationList.route

@@ -9,8 +9,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ConversationDao {
-    @Query("SELECT * FROM conversations WHERE id IN (SELECT DISTINCT conversationId FROM messages) ORDER BY COALESCE(lastMessageTime, createdAt) DESC")
+    @Query("SELECT * FROM conversations ORDER BY COALESCE(lastMessageTime, createdAt) DESC")
     fun getConversationsFlow(): Flow<List<ConversationEntity>>
+
+    @Query("UPDATE conversations SET unreadCount = unreadCount + 1 WHERE id = :conversationId")
+    suspend fun incrementUnreadCount(conversationId: String)
+
+    @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :conversationId")
+    suspend fun clearUnreadCount(conversationId: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(conversation: ConversationEntity): Unit

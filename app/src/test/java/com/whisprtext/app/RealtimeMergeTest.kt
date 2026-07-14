@@ -108,7 +108,8 @@ class RealtimeMergeTest {
             receipts = emptyList(),
             currentTime = "2026-07-12T12:05:00Z"
         )
-        whenever(apiClient.sync(null)).thenReturn(dummyDelta)
+        whenever(preferencesManager.lastSyncTime).thenReturn(flowOf("2026-07-12T11:00:00Z"))
+        whenever(apiClient.sync("2026-07-12T11:00:00Z")).thenReturn(dummyDelta)
         whenever(conversationDao.getById("conv-123")).thenReturn(
             ConversationEntity("conv-123", "direct", 1000L, 0, null, null)
         )

@@ -52,6 +52,7 @@ class ChatViewModel(
     val currentUserId: StateFlow<String> = _currentUserId
 
     init {
+        chatRepository.activeConversationId = conversationId
         viewModelScope.launch {
             preferencesManager.userId.collect { id ->
                 _currentUserId.value = id ?: ""
@@ -75,6 +76,13 @@ class ChatViewModel(
             }
         }
         sync()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        if (chatRepository.activeConversationId == conversationId) {
+            chatRepository.activeConversationId = null
+        }
     }
 
     fun sync() {

@@ -21,6 +21,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_AVATAR_URL = stringPreferencesKey("avatar_url")
         private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
         private val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
+        private val KEY_PUSH_TOKEN = stringPreferencesKey("push_token")
     }
 
     val sessionToken: Flow<String?> = context.dataStore.data.map { preferences ->
@@ -57,6 +58,16 @@ class PreferencesManager(private val context: Context) {
 
     val lastSyncTime: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_LAST_SYNC_TIME]
+    }
+
+    val pushToken: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PUSH_TOKEN]
+    }
+
+    suspend fun savePushToken(token: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_PUSH_TOKEN] = token
+        }
     }
 
     suspend fun saveSession(token: String, userId: String, username: String, avatarUrl: String? = null) {

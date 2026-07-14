@@ -201,6 +201,16 @@ class ApiClient(
         return executeRequest(request)
     }
 
+    suspend fun updatePushToken(token: String): Boolean {
+        val json = gson.toJson(mapOf("push_token" to token))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/me/push-token")
+            .post(body)
+            .build()
+        return executeStatusRequest(request)
+    }
+
     suspend fun getMe(): MeResponse {
         val request = Request.Builder()
             .url("$baseUrl/me")

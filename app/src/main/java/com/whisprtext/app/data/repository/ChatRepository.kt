@@ -1,5 +1,6 @@
 package com.whisprtext.app.data.repository
 
+import android.content.Context
 import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
@@ -10,6 +11,7 @@ import com.whisprtext.app.data.remote.WebSocketManager
 import com.whisprtext.app.data.remote.model.ConversationSummaryDto
 import com.whisprtext.app.data.remote.model.MessageDto
 import com.whisprtext.app.util.NetworkMonitor
+import com.whisprtext.app.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -18,12 +20,13 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-class ChatRepository(
+class ChatRepository @JvmOverloads constructor(
     private val database: AppDatabase,
     private val apiClient: ApiClient,
     private val webSocketManager: WebSocketManager,
     private val networkMonitor: NetworkMonitor,
     private val preferencesManager: PreferencesManager,
+    private val context: Context? = null,
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) {
     private val conversationDao = database.conversationDao()
@@ -31,6 +34,10 @@ class ChatRepository(
     private val scope = CoroutineScope(ioDispatcher)
     private var cachedUserId: String? = null
     private val pendingReceipts = ConcurrentHashMap<String, String>()
+    private val notificationHelper = context?.let { NotificationHelper(it) }
+
+    var activeConversationId: String? = null
+    var isAppInForeground = false
 
     init {
         scope.launch {
@@ -54,19 +61,39 @@ class ChatRepository(
                                 webSocketManager?.markMessageDelivered(event.message.id)
                             }
 
-                            val entityStatus = if (event.message.senderId == currentUserId) "sent" else "delivered"
+                            val isCurrentChat = isAppInForeground && activeConversationId == event.message.conversationId
+                            val entityStatus = if (event.message.senderId == currentUserId) {
+                                "sent"
+                            } else if (isCurrentChat) {
+                                webSocketManager?.markMessageRead(event.message.id)
+                                "read"
+                            } else {
+                                "delivered"
+                            }
+
                             upsertMessage(event.message.toEntity(entityStatus))
                             
                             val conv = conversationDao.getById(event.message.conversationId)
                             if (conv != null) {
-                                conversationDao.insert(conv.copy(
+                                val updatedConv = conv.copy(
                                     lastMessageText = event.message.encryptedContent,
                                     lastMessageTime = event.message.createdAt.toEpochMillis()
-                                ))
+                                )
+                                conversationDao.insert(updatedConv)
                             } else {
                                 scope.launch {
                                     syncConversations()
                                 }
+                            }
+
+                            if (event.message.senderId != currentUserId && !isCurrentChat) {
+                                conversationDao.incrementUnreadCount(event.message.conversationId)
+                                val senderName = conv?.title ?: conv?.username ?: "New Message"
+                                notificationHelper?.showMessageNotification(
+                                    conversationId = event.message.conversationId,
+                                    senderName = senderName,
+                                    messageText = event.message.encryptedContent
+                                )
                             }
                         }
                         is WebSocketEvent.Ack -> {
@@ -214,6 +241,7 @@ class ChatRepository(
                         ))
                     }
                 }
+                syncConversations()
             }
 
             if (delta.receipts.isNotEmpty()) {
@@ -310,6 +338,8 @@ class ChatRepository(
         val currentUserId = preferencesManager.userId.first() ?: return
         webSocketManager.markConversationRead(conversationId)
         messageDao.markConversationMessagesRead(conversationId, currentUserId)
+        conversationDao.clearUnreadCount(conversationId)
+        notificationHelper?.cancelNotification(conversationId)
     }
 
     suspend fun createConversation(type: String, members: List<String>): ConversationEntity {
@@ -442,5 +472,20 @@ class ChatRepository(
         }
         conversationDao.deleteAll()
         messageDao.deleteAll()
+    }
+
+    suspend fun registerPushToken(token: String) {
+        try {
+            val savedToken = preferencesManager.pushToken.first()
+            if (savedToken == token) {
+                return
+            }
+            val success = apiClient.updatePushToken(token)
+            if (success) {
+                preferencesManager.savePushToken(token)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

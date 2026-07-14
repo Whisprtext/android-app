@@ -37,6 +37,6 @@ class WhisprTextApp : Application() {
         webSocketManager = WebSocketManager(wsUrl, preferencesManager, gson)
         networkMonitor = NetworkMonitor(applicationContext)
         
-        chatRepository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager)
+        chatRepository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager, applicationContext)
     }
 }
