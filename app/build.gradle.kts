@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -69,6 +70,11 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.coroutines.android)
     implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // Firebase (Cloud Messaging for push notifications)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

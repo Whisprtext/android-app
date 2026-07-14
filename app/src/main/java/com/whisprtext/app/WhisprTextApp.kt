@@ -1,7 +1,10 @@
 package com.whisprtext.app
 
 import android.app.Application
+import android.util.Log
 import androidx.room.Room
+import com.google.firebase.FirebaseApp
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
 import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.PreferencesManager
@@ -9,6 +12,10 @@ import com.whisprtext.app.data.remote.ApiClient
 import com.whisprtext.app.data.remote.WebSocketManager
 import com.whisprtext.app.data.repository.ChatRepository
 import com.whisprtext.app.util.NetworkMonitor
+import com.whisprtext.app.util.NotificationHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class WhisprTextApp : Application() {
     lateinit var preferencesManager: PreferencesManager
@@ -17,6 +24,9 @@ class WhisprTextApp : Application() {
     lateinit var webSocketManager: WebSocketManager
     lateinit var networkMonitor: NetworkMonitor
     lateinit var chatRepository: ChatRepository
+    lateinit var notificationHelper: NotificationHelper
+
+    private val appScope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -36,7 +46,53 @@ class WhisprTextApp : Application() {
             .create()
         webSocketManager = WebSocketManager(wsUrl, preferencesManager, gson)
         networkMonitor = NetworkMonitor(applicationContext)
+        notificationHelper = NotificationHelper(applicationContext)
         
         chatRepository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager, applicationContext)
+
+        // Initialise Firebase and fetch a real FCM token.
+        initFirebaseAndRegisterToken()
+    }
+
+    private fun initFirebaseAndRegisterToken() {
+        try {
+            // FirebaseApp.initializeApp() reads google-services.json automatically
+            // if the google-services Gradle plugin is applied, or uses the values
+            // provided in FirebaseOptions if configured manually.
+            FirebaseApp.initializeApp(this)
+            Log.d(TAG, "FirebaseApp initialised")
+        } catch (e: Exception) {
+            // Firebase may already be initialised if the google-services plugin is active.
+            Log.d(TAG, "FirebaseApp already initialised or init skipped: ${e.message}")
+        }
+
+        appScope.launch {
+            try {
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    if (!task.isSuccessful) {
+                        Log.w(TAG, "Failed to get FCM token", task.exception)
+                        return@addOnCompleteListener
+                    }
+                    val token = task.result
+                    if (token != null) {
+                        Log.i(TAG, "FCM token obtained: ${token.take(16)}...")
+                        appScope.launch {
+                            try {
+                                chatRepository.registerPushToken(token)
+                                Log.i(TAG, "FCM token registered with backend")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to register FCM token with backend", e)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching FCM token", e)
+            }
+        }
+    }
+
+    companion object {
+        private const val TAG = "WhisprTextApp"
     }
 }
