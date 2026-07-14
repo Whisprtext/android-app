@@ -87,15 +87,15 @@ class MainActivity : ComponentActivity() {
                         ) {
                             composable(Screen.ConversationList.route) {
                                 val conversationsViewModel = viewModelFactory {
-                                    ConversationsViewModel(chatRepository)
+                                    ConversationsViewModel(chatRepository, preferencesManager)
                                 }
                                 ConversationListScreen(
                                     viewModel = conversationsViewModel,
                                     onConversationClick = { convId ->
                                         navController.navigate(Screen.Chat.createRoute(convId))
                                     },
-                                    onSettingsClick = {
-                                        navController.navigate(Screen.Settings.route)
+                                    onProfileClick = {
+                                        navController.navigate(Screen.Profile.route)
                                     },
                                     onAddContactClick = {
                                         navController.navigate(Screen.ContactDiscovery.route)
@@ -125,9 +125,6 @@ class MainActivity : ComponentActivity() {
                                     onBackClick = {
                                         navController.popBackStack()
                                     },
-                                    onProfileClick = {
-                                        navController.navigate(Screen.Profile.route)
-                                    },
                                     onLogoutSuccess = {
                                         // Handled automatically by the sessionToken flow observer
                                     }
@@ -142,6 +139,9 @@ class MainActivity : ComponentActivity() {
                                     viewModel = profileViewModel,
                                     onBackClick = {
                                         navController.popBackStack()
+                                    },
+                                    onSettingsClick = {
+                                        navController.navigate(Screen.Settings.route)
                                     }
                                 )
                             }

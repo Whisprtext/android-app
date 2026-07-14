@@ -1,5 +1,6 @@
 package com.whisprtext.app
 
+import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.repository.ChatRepository
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
@@ -19,6 +20,7 @@ class ConversationsViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val chatRepository: ChatRepository = mock()
+    private val preferencesManager: PreferencesManager = mock()
     private lateinit var viewModel: ConversationsViewModel
 
     @Before
@@ -28,7 +30,8 @@ class ConversationsViewModelTest {
             ConversationEntity("conv-1", "direct", 1000L, 0, "Last Msg", 1000L)
         )
         whenever(chatRepository.getConversations()).thenReturn(flowOf(dummyList))
-        viewModel = ConversationsViewModel(chatRepository)
+        whenever(preferencesManager.username).thenReturn(flowOf("testuser"))
+        viewModel = ConversationsViewModel(chatRepository, preferencesManager)
     }
 
     @After

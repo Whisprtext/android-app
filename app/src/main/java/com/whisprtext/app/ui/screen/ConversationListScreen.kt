@@ -31,7 +31,7 @@ import com.whisprtext.app.util.ContactHelper
 fun ConversationListScreen(
     viewModel: ConversationsViewModel,
     onConversationClick: (String) -> Unit,
-    onSettingsClick: () -> Unit,
+    onProfileClick: () -> Unit,
     onAddContactClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -84,8 +84,11 @@ fun ConversationListScreen(
                         IconButton(onClick = { viewModel.sync() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        IconButton(onClick = onProfileClick) {
+                            InitialsAvatar(
+                                id = uiState.username ?: "Me",
+                                modifier = Modifier.size(32.dp)
+                            )
                         }
                     }
                 )

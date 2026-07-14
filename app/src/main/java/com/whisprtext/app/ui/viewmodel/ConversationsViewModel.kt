@@ -2,6 +2,7 @@ package com.whisprtext.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.repository.ChatRepository
 import kotlinx.coroutines.flow.*
@@ -10,11 +11,13 @@ import kotlinx.coroutines.launch
 data class ConversationsUiState(
     val conversations: List<ConversationEntity> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val username: String? = null
 )
 
 class ConversationsViewModel(
-    private val chatRepository: ChatRepository
+    private val chatRepository: ChatRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(false)
@@ -22,10 +25,11 @@ class ConversationsViewModel(
 
     val uiState: StateFlow<ConversationsUiState> = combine(
         chatRepository.getConversations(),
+        preferencesManager.username,
         _isLoading,
         _error
-    ) { conversations, isLoading, error ->
-        ConversationsUiState(conversations, isLoading, error)
+    ) { conversations, username, isLoading, error ->
+        ConversationsUiState(conversations, isLoading, error, username)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
