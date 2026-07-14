@@ -10,7 +10,8 @@ import kotlinx.coroutines.launch
 
 class ProfileViewModel(
     private val apiClient: ApiClient,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    val targetUsername: String? = null
 ) : ViewModel() {
 
     private val _userProfile = MutableStateFlow<UserDto?>(null)
@@ -38,8 +39,13 @@ class ProfileViewModel(
             _isLoading.value = true
             _errorMessage.value = null
             try {
-                val me = apiClient.getMe()
-                _userProfile.value = me.user
+                if (targetUsername != null) {
+                    val user = apiClient.searchUserByUsername(targetUsername)
+                    _userProfile.value = user
+                } else {
+                    val me = apiClient.getMe()
+                    _userProfile.value = me.user
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 _errorMessage.value = "Failed to load profile: ${e.localizedMessage}"

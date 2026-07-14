@@ -8,34 +8,39 @@ import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.repository.ChatRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import com.whisprtext.app.data.remote.model.UserDto
 
 data class ChatUiState(
     val messages: List<MessageEntity> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val conversation: ConversationEntity? = null
+    val conversation: ConversationEntity? = null,
+    val otherUser: UserDto? = null
 )
-
+ 
 class ChatViewModel(
     val conversationId: String,
     private val chatRepository: ChatRepository,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
-
+ 
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
-
+    private val _otherUser = MutableStateFlow<UserDto?>(null)
+ 
     val uiState: StateFlow<ChatUiState> = combine(
         chatRepository.getMessages(conversationId),
         chatRepository.getConversationFlow(conversationId),
+        _otherUser,
         _isLoading,
         _error
-    ) { messages, conversation, isLoading, error ->
+    ) { messages, conversation, otherUser, isLoading, error ->
         ChatUiState(
             messages = messages,
             isLoading = isLoading,
             error = error,
-            conversation = conversation
+            conversation = conversation,
+            otherUser = otherUser
         )
     }.stateIn(
         scope = viewModelScope,
@@ -55,6 +60,18 @@ class ChatViewModel(
         viewModelScope.launch {
             chatRepository.getMessages(conversationId).collect {
                 chatRepository.markConversationAsRead(conversationId)
+            }
+        }
+        viewModelScope.launch {
+            chatRepository.getConversationFlow(conversationId).collect { conversation ->
+                if (conversation != null && conversation.type == "direct" && !conversation.username.isNullOrEmpty()) {
+                    try {
+                        val user = chatRepository.searchUserByUsername(conversation.username)
+                        _otherUser.value = user
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
         }
         sync()

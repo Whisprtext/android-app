@@ -20,6 +20,8 @@ import androidx.lifecycle.ViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.whisprtext.app.ui.navigation.Screen
 import com.whisprtext.app.ui.screen.AuthScreen
 import com.whisprtext.app.ui.screen.ChatScreen
@@ -112,6 +114,9 @@ class MainActivity : ComponentActivity() {
                                     viewModel = chatViewModel,
                                     onBackClick = {
                                         navController.popBackStack()
+                                    },
+                                    onProfileClick = { targetUsername ->
+                                        navController.navigate(Screen.Profile.createRoute(targetUsername))
                                     }
                                 )
                             }
@@ -131,9 +136,19 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            composable(Screen.Profile.route) {
+                            composable(
+                                route = Screen.Profile.route,
+                                arguments = listOf(
+                                    navArgument("username") {
+                                        type = NavType.StringType
+                                        nullable = true
+                                        defaultValue = null
+                                    }
+                                )
+                            ) { backStackEntry ->
+                                val username = backStackEntry.arguments?.getString("username")
                                 val profileViewModel = viewModelFactory {
-                                    ProfileViewModel(apiClient, preferencesManager)
+                                    ProfileViewModel(apiClient, preferencesManager, username)
                                 }
                                 ProfileScreen(
                                     viewModel = profileViewModel,
@@ -142,7 +157,8 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onSettingsClick = {
                                         navController.navigate(Screen.Settings.route)
-                                    }
+                                    },
+                                    isOwnProfile = username == null
                                 )
                             }
 

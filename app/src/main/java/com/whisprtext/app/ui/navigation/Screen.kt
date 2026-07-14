@@ -8,5 +8,7 @@ sealed class Screen(val route: String) {
     }
     object Settings : Screen("settings")
     object ContactDiscovery : Screen("contact_discovery")
-    object Profile : Screen("profile")
+    object Profile : Screen("profile?username={username}") {
+        fun createRoute(username: String? = null) = if (username != null) "profile?username=$username" else "profile"
+    }
 }

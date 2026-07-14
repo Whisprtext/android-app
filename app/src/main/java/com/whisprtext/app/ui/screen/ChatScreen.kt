@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextLayoutResult
@@ -37,7 +38,8 @@ import com.whisprtext.app.util.MarkdownParser
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onProfileClick: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
@@ -67,7 +69,34 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(displayTitle) },
+                title = {
+                    val targetUsername = uiState.conversation?.username
+                    val isDirect = uiState.conversation?.type == "direct"
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = isDirect && !targetUsername.isNullOrEmpty()) {
+                                if (targetUsername != null) {
+                                    onProfileClick(targetUsername)
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isDirect) {
+                            InitialsAvatar(
+                                id = displayTitle,
+                                avatarUrl = uiState.otherUser?.avatarUrl,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")

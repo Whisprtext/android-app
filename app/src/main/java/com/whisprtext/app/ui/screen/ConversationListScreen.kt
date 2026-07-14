@@ -18,10 +18,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 import com.whisprtext.app.util.ContactHelper
@@ -170,7 +173,8 @@ fun ConversationListScreen(
 @Composable
 fun InitialsAvatar(
     id: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    avatarUrl: String? = null
 ) {
     val initials = id.take(2).uppercase()
     val colors = listOf(
@@ -181,17 +185,30 @@ fun InitialsAvatar(
     val colorIndex = Math.abs(id.hashCode()) % colors.size
     val backgroundColor = colors[colorIndex]
 
+    var isError by remember(avatarUrl) { mutableStateOf(false) }
+
     Box(
         modifier = modifier
             .size(40.dp)
-            .background(backgroundColor, shape = CircleShape),
+            .background(backgroundColor, shape = CircleShape)
+            .clip(CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = initials,
-            color = Color.White,
-            fontSize = 16.sp
-        )
+        if (!avatarUrl.isNullOrBlank() && !isError) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = id,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                onError = { isError = true }
+            )
+        } else {
+            Text(
+                text = initials,
+                color = Color.White,
+                fontSize = 16.sp
+            )
+        }
     }
 }
 
