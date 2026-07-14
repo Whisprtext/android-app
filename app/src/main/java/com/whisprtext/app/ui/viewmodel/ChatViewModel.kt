@@ -60,7 +60,9 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             chatRepository.getMessages(conversationId).collect {
-                chatRepository.markConversationAsRead(conversationId)
+                if (chatRepository.isAppInForeground && chatRepository.activeConversationId == conversationId) {
+                    chatRepository.markConversationAsRead(conversationId)
+                }
             }
         }
         viewModelScope.launch {

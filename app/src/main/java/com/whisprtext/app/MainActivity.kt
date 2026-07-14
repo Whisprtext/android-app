@@ -43,6 +43,8 @@ import android.content.pm.PackageManager
 import android.util.Log
 
 import kotlinx.coroutines.flow.first
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -53,7 +55,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        (application as? WhisprTextApp)?.chatRepository?.isAppInForeground = true
+        val app = application as? WhisprTextApp
+        app?.chatRepository?.let { repo ->
+            repo.isAppInForeground = true
+            repo.activeConversationId?.let { activeId ->
+                lifecycleScope.launch {
+                    repo.markConversationAsRead(activeId)
+                }
+            }
+        }
     }
 
     override fun onStop() {
