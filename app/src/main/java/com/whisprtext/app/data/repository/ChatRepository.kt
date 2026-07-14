@@ -333,13 +333,14 @@ class ChatRepository(
             lastMessageTime = null,
             title = response.displayName ?: response.username,
             username = response.username,
-            phoneNumber = response.phoneNumber
+            phoneNumber = response.phoneNumber,
+            avatarUrl = response.avatarUrl
         )
         conversationDao.insert(entity)
         return entity
     }
 
-    suspend fun createDirectConversation(targetUserId: String?, username: String?): ConversationEntity {
+    suspend fun createDirectConversation(targetUserId: String?, username: String?, avatarUrl: String? = null): ConversationEntity {
         val response = apiClient.createDirectConversation(targetUserId, username)
         val entity = ConversationEntity(
             id = response.id,
@@ -350,13 +351,15 @@ class ChatRepository(
             lastMessageTime = null,
             title = response.displayName ?: response.username ?: targetUserId ?: username,
             username = response.username,
-            phoneNumber = response.phoneNumber
+            phoneNumber = response.phoneNumber,
+            avatarUrl = response.avatarUrl ?: avatarUrl
         )
         conversationDao.insert(entity)
         return entity
     }
 
     suspend fun searchUserByUsername(username: String) = apiClient.searchUserByUsername(username)
+    suspend fun getMe() = apiClient.getMe()
     suspend fun lookupUsersByPhone(phoneNumbers: List<String>) = apiClient.lookupUsersByPhone(phoneNumbers)
     suspend fun updateSettings(
         phoneNumber: String?,
@@ -384,7 +387,8 @@ class ChatRepository(
             lastMessageTime = lastMessage?.createdAt?.toEpochMillis(),
             title = displayName ?: username,
             username = username,
-            phoneNumber = phoneNumber
+            phoneNumber = phoneNumber,
+            avatarUrl = avatarUrl
         )
     }
 

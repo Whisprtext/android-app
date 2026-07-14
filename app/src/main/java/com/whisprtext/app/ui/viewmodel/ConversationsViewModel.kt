@@ -12,7 +12,8 @@ data class ConversationsUiState(
     val conversations: List<ConversationEntity> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val username: String? = null
+    val username: String? = null,
+    val avatarUrl: String? = null
 )
 
 class ConversationsViewModel(
@@ -26,10 +27,11 @@ class ConversationsViewModel(
     val uiState: StateFlow<ConversationsUiState> = combine(
         chatRepository.getConversations(),
         preferencesManager.username,
+        preferencesManager.avatarUrl,
         _isLoading,
         _error
-    ) { conversations, username, isLoading, error ->
-        ConversationsUiState(conversations, isLoading, error, username)
+    ) { conversations, username, avatarUrl, isLoading, error ->
+        ConversationsUiState(conversations, isLoading, error, username, avatarUrl)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -38,6 +40,18 @@ class ConversationsViewModel(
 
     init {
         sync()
+        fetchMyProfile()
+    }
+
+    private fun fetchMyProfile() {
+        viewModelScope.launch {
+            try {
+                val me = chatRepository.getMe()
+                preferencesManager.saveAvatarUrl(me.user.avatarUrl)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     fun sync() {

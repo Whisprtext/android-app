@@ -5,12 +5,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.whisprtext.app.ui.viewmodel.ProfileViewModel
@@ -21,6 +24,7 @@ fun ProfileScreen(
     viewModel: ProfileViewModel,
     onBackClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
+    onPrivacyClick: () -> Unit = {},
     isOwnProfile: Boolean = true
 ) {
     val userProfile by viewModel.userProfile.collectAsState()
@@ -30,17 +34,21 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollState = rememberScrollState()
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = Color.Transparent,
+        cursorColor = MaterialTheme.colorScheme.primary,
+        errorContainerColor = Color.Transparent,
+    )
+
     // Profile fields states
     var usernameInput by remember { mutableStateOf("") }
     var displayNameInput by remember { mutableStateOf("") }
     var bioInput by remember { mutableStateOf("") }
     var avatarInput by remember { mutableStateOf("") }
-
-    // Privacy fields states
     var phoneInput by remember { mutableStateOf("") }
-    var discUsernameInput by remember { mutableStateOf(true) }
-    var discPhoneInput by remember { mutableStateOf(true) }
-    var phoneVisibilityInput by remember { mutableStateOf("everyone") }
 
     // Sync input states when userProfile updates
     LaunchedEffect(userProfile) {
@@ -50,9 +58,6 @@ fun ProfileScreen(
             bioInput = user.bio
             avatarInput = user.avatarUrl
             phoneInput = user.phoneNumber ?: ""
-            discUsernameInput = user.discoverableByUsername
-            discPhoneInput = user.discoverableByPhone
-            phoneVisibilityInput = user.phoneNumberVisibility
         }
     }
 
@@ -65,10 +70,10 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isOwnProfile) "Profile & Settings" else "Public Profile") },
+                title = { Text("Profile") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -91,6 +96,52 @@ fun ProfileScreen(
             ) {
                 CircularProgressIndicator()
             }
+        } else if (!isOwnProfile) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(scrollState)
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Profile Avatar (larger for public profile: 200.dp)
+                Box(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val avatarLabel = usernameInput.ifBlank { displayNameInput.ifBlank { "?" } }
+                    InitialsAvatar(
+                        id = avatarLabel,
+                        modifier = Modifier.size(200.dp),
+                        avatarUrl = avatarInput,
+                        fontSize = 80.sp
+                    )
+                }
+
+                // About Info in quotation
+                val displayBio = bioInput.ifBlank { "No bio provided" }
+                Text(
+                    text = "\"$displayBio\"",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                )
+
+                // Phone Number (horizontally centered)
+                if (phoneInput.isNotBlank()) {
+                    Text(
+                        text = phoneInput,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         } else {
             Column(
                 modifier = Modifier
@@ -102,16 +153,17 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Profile Avatar Indicator
+                // Profile Avatar (180.dp for own profile)
                 Box(
                     modifier = Modifier.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    val avatarLabel = if (displayNameInput.isNotBlank()) displayNameInput else usernameInput
+                    val avatarLabel = usernameInput.ifBlank { displayNameInput.ifBlank { "?" } }
                     InitialsAvatar(
-                        id = if (avatarLabel.isNotBlank()) avatarLabel else "?",
-                        modifier = Modifier.size(80.dp),
-                        avatarUrl = avatarInput
+                        id = avatarLabel,
+                        modifier = Modifier.size(180.dp),
+                        avatarUrl = avatarInput,
+                        fontSize = 72.sp
                     )
                 }
 
@@ -130,212 +182,102 @@ fun ProfileScreen(
                     }
                 }
 
-                // Card 1: User Identity Settings
-                Card(
-                    modifier = Modifier.fillMaxWidth()
+                // Profile Info Section
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(if (isOwnProfile) "Profile Info" else "User Info", style = MaterialTheme.typography.titleMedium)
-                        HorizontalDivider()
- 
-                        OutlinedTextField(
-                            value = displayNameInput,
-                            onValueChange = { displayNameInput = it },
-                            label = { Text("Display Name") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            readOnly = !isOwnProfile
-                        )
- 
-                        val isUsernameValid = viewModel.validateUsername(usernameInput)
-                        OutlinedTextField(
-                            value = usernameInput,
-                            onValueChange = { usernameInput = it },
-                            label = { Text("Username") },
-                            isError = isOwnProfile && !isUsernameValid && usernameInput.isNotEmpty(),
-                            supportingText = {
-                                if (isOwnProfile && !isUsernameValid && usernameInput.isNotEmpty()) {
-                                    Text("Alphanumeric, dot (.), and underscores (_) only", color = MaterialTheme.colorScheme.error)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            readOnly = !isOwnProfile
-                        )
- 
-                        OutlinedTextField(
-                            value = if (bioInput.isBlank() && !isOwnProfile) "No bio provided" else bioInput,
-                            onValueChange = { bioInput = it },
-                            label = { Text("Bio / Status message") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = false,
-                            maxLines = 3,
-                            readOnly = !isOwnProfile
-                        )
- 
-                        if (!isOwnProfile && phoneInput.isNotBlank()) {
-                            OutlinedTextField(
-                                value = phoneInput,
-                                onValueChange = {},
-                                label = { Text("Phone Number") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                readOnly = true
-                            )
-                        }
- 
-                        if (isOwnProfile) {
-                            OutlinedTextField(
-                                value = avatarInput,
-                                onValueChange = { avatarInput = it },
-                                label = { Text("Avatar Photo URL") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
- 
-                            Button(
-                                onClick = {
-                                    viewModel.saveProfile(
-                                        username = usernameInput,
-                                        displayName = displayNameInput,
-                                        bio = bioInput,
-                                        avatarUrl = avatarInput
-                                    )
-                                },
-                                enabled = !isLoading && isUsernameValid,
-                                modifier = Modifier.align(Alignment.End)
-                            ) {
-                                Text("Save Profile")
+                    Text("Profile Info", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    HorizontalDivider()
+
+                    OutlinedTextField(
+                        value = displayNameInput,
+                        onValueChange = { displayNameInput = it },
+                        label = { Text("Display Name") },
+                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = fieldColors
+                    )
+
+                    val isUsernameValid = viewModel.validateUsername(usernameInput)
+                    OutlinedTextField(
+                        value = usernameInput,
+                        onValueChange = { usernameInput = it },
+                        label = { Text("Username") },
+                        leadingIcon = { Icon(Icons.Default.AlternateEmail, contentDescription = null) },
+                        isError = !isUsernameValid && usernameInput.isNotEmpty(),
+                        supportingText = {
+                            if (!isUsernameValid && usernameInput.isNotEmpty()) {
+                                Text("Alphanumeric, dot (.), and underscores (_) only", color = MaterialTheme.colorScheme.error)
                             }
-                        }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = fieldColors
+                    )
+
+                    OutlinedTextField(
+                        value = bioInput,
+                        onValueChange = { bioInput = it },
+                        label = { Text("Bio / Status message") },
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false,
+                        maxLines = 3,
+                        colors = fieldColors
+                    )
+
+                    OutlinedTextField(
+                        value = avatarInput,
+                        onValueChange = { avatarInput = it },
+                        label = { Text("Avatar Photo URL") },
+                        leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = fieldColors
+                    )
+
+                    Button(
+                        onClick = {
+                            viewModel.saveProfile(
+                                username = usernameInput,
+                                displayName = displayNameInput,
+                                bio = bioInput,
+                                avatarUrl = avatarInput
+                            )
+                        },
+                        enabled = !isLoading && isUsernameValid,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Save Profile")
                     }
-                }
 
-                // Card 2: Discovery & Privacy
-                if (isOwnProfile) {
+                    // Privacy Section (only for own profile)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Privacy & Discovery", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    HorizontalDivider()
+
                     Card(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPrivacyClick() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Privacy & Discovery", style = MaterialTheme.typography.titleMedium)
-                            HorizontalDivider()
-
-                            val isPhoneValid = viewModel.validatePhone(phoneInput)
-                            OutlinedTextField(
-                                value = phoneInput,
-                                onValueChange = { phoneInput = it },
-                                label = { Text("Phone Number") },
-                                isError = !isPhoneValid && phoneInput.isNotEmpty(),
-                                supportingText = {
-                                    if (!isPhoneValid && phoneInput.isNotEmpty()) {
-                                        Text("International format required (e.g. +15555551234)", color = MaterialTheme.colorScheme.error)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Discoverable by Username", fontSize = 15.sp)
-                                    Text(
-                                        "Allow searches by username",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = discUsernameInput,
-                                    onCheckedChange = { discUsernameInput = it }
-                                )
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text("Who can see my phone number", style = MaterialTheme.typography.bodyLarge)
+                                Text("Manage discoverability and visibility", style = MaterialTheme.typography.bodySmall)
                             }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Discoverable by Phone", fontSize = 15.sp)
-                                    Text(
-                                        "Allow matching from other contacts list",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = discPhoneInput,
-                                    onCheckedChange = { discPhoneInput = it }
-                                )
-                            }
-
-                            // Phone Number Visibility Select List
-                            var expanded by remember { mutableStateOf(false) }
-                            val visibilityOptions = listOf("everyone", "contacts", "hidden")
-                            val visibilityLabels = mapOf(
-                                "everyone" to "Everyone",
-                                "contacts" to "Contacts Only",
-                                "hidden" to "Nobody (Hidden)"
-                            )
-
-                            Box(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = visibilityLabels[phoneVisibilityInput] ?: phoneVisibilityInput,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Who can see my phone number") },
-                                    trailingIcon = {
-                                        IconButton(onClick = { expanded = !expanded }) {
-                                            Text("▼", fontSize = 10.sp)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { expanded = !expanded }
-                                )
-                                DropdownMenu(
-                                    expanded = expanded,
-                                    onDismissRequest = { expanded = false },
-                                    modifier = Modifier.fillMaxWidth(0.9f)
-                                ) {
-                                    visibilityOptions.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { Text(visibilityLabels[option] ?: option) },
-                                            onClick = {
-                                                phoneVisibilityInput = option
-                                                expanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Button(
-                                onClick = {
-                                    viewModel.savePrivacySettings(
-                                        phoneNumber = phoneInput,
-                                        discoverableByUsername = discUsernameInput,
-                                        discoverableByPhone = discPhoneInput,
-                                        phoneNumberVisibility = phoneVisibilityInput
-                                    )
-                                },
-                                enabled = !isLoading && isPhoneValid,
-                                modifier = Modifier.align(Alignment.End)
-                            ) {
-                                Text("Save Privacy")
-                            }
+                            Spacer(Modifier.weight(1f))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null)
                         }
                     }
                 }

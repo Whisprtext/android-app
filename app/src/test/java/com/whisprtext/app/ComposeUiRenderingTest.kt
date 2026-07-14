@@ -22,6 +22,6 @@ class ComposeUiRenderingTest {
             InitialsAvatar(id = "conv-123")
         }
 
-        composeTestRule.onNodeWithText("CO").assertExists()
+        composeTestRule.onNodeWithText("C").assertExists()
     }
 }

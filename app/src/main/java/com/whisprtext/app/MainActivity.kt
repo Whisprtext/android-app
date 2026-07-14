@@ -28,6 +28,7 @@ import com.whisprtext.app.ui.screen.ChatScreen
 import com.whisprtext.app.ui.screen.ConversationListScreen
 import com.whisprtext.app.ui.screen.SettingsScreen
 import com.whisprtext.app.ui.screen.ProfileScreen
+import com.whisprtext.app.ui.screen.PrivacyScreen
 import com.whisprtext.app.ui.theme.WhisrtextTheme
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
@@ -97,7 +98,7 @@ class MainActivity : ComponentActivity() {
                                         navController.navigate(Screen.Chat.createRoute(convId))
                                     },
                                     onProfileClick = {
-                                        navController.navigate(Screen.Profile.route)
+                                        navController.navigate(Screen.Profile.createRoute())
                                     },
                                     onAddContactClick = {
                                         navController.navigate(Screen.ContactDiscovery.route)
@@ -130,6 +131,9 @@ class MainActivity : ComponentActivity() {
                                     onBackClick = {
                                         navController.popBackStack()
                                     },
+                                    onPrivacyClick = {
+                                        navController.navigate(Screen.Privacy.route)
+                                    },
                                     onLogoutSuccess = {
                                         // Handled automatically by the sessionToken flow observer
                                     }
@@ -158,7 +162,22 @@ class MainActivity : ComponentActivity() {
                                     onSettingsClick = {
                                         navController.navigate(Screen.Settings.route)
                                     },
+                                    onPrivacyClick = {
+                                        navController.navigate(Screen.Privacy.route)
+                                    },
                                     isOwnProfile = username == null
+                                )
+                            }
+
+                            composable(Screen.Privacy.route) {
+                                val profileViewModel = viewModelFactory {
+                                    ProfileViewModel(apiClient, preferencesManager)
+                                }
+                                PrivacyScreen(
+                                    viewModel = profileViewModel,
+                                    onBackClick = {
+                                        navController.popBackStack()
+                                    }
                                 )
                             }
 

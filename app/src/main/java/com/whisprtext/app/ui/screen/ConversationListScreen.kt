@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -90,6 +91,7 @@ fun ConversationListScreen(
                         IconButton(onClick = onProfileClick) {
                             InitialsAvatar(
                                 id = uiState.username ?: "Me",
+                                avatarUrl = uiState.avatarUrl,
                                 modifier = Modifier.size(32.dp)
                             )
                         }
@@ -174,9 +176,10 @@ fun ConversationListScreen(
 fun InitialsAvatar(
     id: String,
     modifier: Modifier = Modifier,
-    avatarUrl: String? = null
+    avatarUrl: String? = null,
+    fontSize: TextUnit = 16.sp
 ) {
-    val initials = id.take(2).uppercase()
+    val initials = id.take(1).uppercase()
     val colors = listOf(
         Color(0xFFE57373), Color(0xFFF06292), Color(0xFFBA68C8), Color(0xFF9575CD),
         Color(0xFF7986CB), Color(0xFF64B5F6), Color(0xFF4FC3F7), Color(0xFF4DB6AC),
@@ -189,11 +192,17 @@ fun InitialsAvatar(
 
     Box(
         modifier = modifier
-            .size(40.dp)
             .background(backgroundColor, shape = CircleShape)
             .clip(CircleShape),
         contentAlignment = Alignment.Center
     ) {
+        // Show initials as a fallback/placeholder
+        Text(
+            text = initials,
+            color = Color.White,
+            fontSize = fontSize
+        )
+
         if (!avatarUrl.isNullOrBlank() && !isError) {
             AsyncImage(
                 model = avatarUrl,
@@ -201,12 +210,6 @@ fun InitialsAvatar(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
                 onError = { isError = true }
-            )
-        } else {
-            Text(
-                text = initials,
-                color = Color.White,
-                fontSize = 16.sp
             )
         }
     }
@@ -249,7 +252,12 @@ fun ConversationItem(
                     onCheckedChange = { onClick() }
                 )
             } else {
-                InitialsAvatar(id = displayName)
+                val avatarId = conversation.username ?: conversation.title ?: "Chat"
+                InitialsAvatar(
+                    id = avatarId,
+                    avatarUrl = conversation.avatarUrl,
+                    modifier = Modifier.size(40.dp)
+                )
             }
         },
         headlineContent = {

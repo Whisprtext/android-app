@@ -18,6 +18,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SESSION_TOKEN = stringPreferencesKey("session_token")
         private val KEY_USER_ID = stringPreferencesKey("user_id")
         private val KEY_USERNAME = stringPreferencesKey("username")
+        private val KEY_AVATAR_URL = stringPreferencesKey("avatar_url")
         private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
         private val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
     }
@@ -50,21 +51,34 @@ class PreferencesManager(private val context: Context) {
         preferences[KEY_USERNAME]
     }
 
+    val avatarUrl: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_AVATAR_URL]
+    }
+
     val lastSyncTime: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_LAST_SYNC_TIME]
     }
 
-    suspend fun saveSession(token: String, userId: String, username: String) {
+    suspend fun saveSession(token: String, userId: String, username: String, avatarUrl: String? = null) {
         context.dataStore.edit { preferences ->
             preferences[KEY_SESSION_TOKEN] = token
             preferences[KEY_USER_ID] = userId
             preferences[KEY_USERNAME] = username
+            if (avatarUrl != null) {
+                preferences[KEY_AVATAR_URL] = avatarUrl
+            }
         }
     }
 
     suspend fun saveUsername(username: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_USERNAME] = username
+        }
+    }
+
+    suspend fun saveAvatarUrl(avatarUrl: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_AVATAR_URL] = avatarUrl
         }
     }
 
@@ -79,6 +93,7 @@ class PreferencesManager(private val context: Context) {
             preferences.remove(KEY_SESSION_TOKEN)
             preferences.remove(KEY_USER_ID)
             preferences.remove(KEY_USERNAME)
+            preferences.remove(KEY_AVATAR_URL)
             preferences.remove(KEY_LAST_SYNC_TIME)
         }
     }

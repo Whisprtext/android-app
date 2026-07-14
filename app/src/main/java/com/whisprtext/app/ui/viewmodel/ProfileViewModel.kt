@@ -45,6 +45,7 @@ class ProfileViewModel(
                 } else {
                     val me = apiClient.getMe()
                     _userProfile.value = me.user
+                    preferencesManager.saveAvatarUrl(me.user.avatarUrl)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -82,6 +83,7 @@ class ProfileViewModel(
                 )
                 _userProfile.value = updatedUser
                 preferencesManager.saveUsername(updatedUser.username)
+                preferencesManager.saveAvatarUrl(updatedUser.avatarUrl)
                 _successMessage.emit("Profile updated successfully")
             } catch (e: Exception) {
                 e.printStackTrace()

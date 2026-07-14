@@ -92,7 +92,7 @@ class ContactDiscoveryViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val conversation = chatRepository.createDirectConversation(user.id, null)
+                val conversation = chatRepository.createDirectConversation(user.id, null, user.avatarUrl)
                 _chatCreated.emit(conversation)
             } catch (e: Exception) {
                 e.printStackTrace()

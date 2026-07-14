@@ -63,7 +63,7 @@ class AuthViewModelTest {
         runCurrent()
 
         assertEquals(AuthState.Success, viewModel.authState.value)
-        verify(preferencesManager).saveSession("dummy-token", "user-123", "alice")
+        verify(preferencesManager).saveSession("dummy-token", "user-123", "alice", "")
     }
 
     @Test

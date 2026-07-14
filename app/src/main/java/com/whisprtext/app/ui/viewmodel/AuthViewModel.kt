@@ -34,7 +34,7 @@ class AuthViewModel(
                 Log.d("AuthViewModel", "login() making API call with device: $devName")
                 val response = apiClient.login(username, passwordHash, devName)
                 Log.d("AuthViewModel", "login() API call success: token=${response.sessionToken}")
-                preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username)
+                preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username, response.user.avatarUrl)
                 Log.d("AuthViewModel", "login() session saved successfully")
                 _authState.value = AuthState.Success
             } catch (e: Exception) {
@@ -53,7 +53,7 @@ class AuthViewModel(
                 Log.d("AuthViewModel", "signup() making API call with device: $devName")
                 val response = apiClient.signup(username, passwordHash, devName)
                 Log.d("AuthViewModel", "signup() API call success: token=${response.sessionToken}")
-                preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username)
+                preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username, response.user.avatarUrl)
                 Log.d("AuthViewModel", "signup() session saved successfully")
                 _authState.value = AuthState.Success
             } catch (e: Exception) {

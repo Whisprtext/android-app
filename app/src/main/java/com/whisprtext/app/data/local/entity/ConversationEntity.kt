@@ -13,5 +13,6 @@ data class ConversationEntity(
     val lastMessageTime: Long?,
     val title: String? = null,
     val username: String? = null,
-    val phoneNumber: String? = null
+    val phoneNumber: String? = null,
+    val avatarUrl: String? = null
 )

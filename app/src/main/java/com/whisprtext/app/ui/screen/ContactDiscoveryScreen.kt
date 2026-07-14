@@ -104,22 +104,23 @@ fun ContactDiscoveryScreen(
             }
 
             searchResult?.let { user ->
-                Card(
+                ListItem(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    ListItem(
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        leadingContent = { InitialsAvatar(id = user.username) },
-                        headlineContent = { Text(user.username) },
-                        supportingContent = { Text("Discoverable user") },
-                        trailingContent = {
-                            Button(onClick = { viewModel.startChat(user) }) {
-                                Text("Chat")
-                            }
+                    leadingContent = {
+                        InitialsAvatar(
+                            id = user.username,
+                            avatarUrl = user.avatarUrl,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                    headlineContent = { Text(user.username) },
+                    supportingContent = { Text("Discoverable user") },
+                    trailingContent = {
+                        Button(onClick = { viewModel.startChat(user) }) {
+                            Text("Chat")
                         }
-                    )
-                }
+                    }
+                )
             }
 
             HorizontalDivider()
@@ -151,18 +152,23 @@ fun ContactDiscoveryScreen(
                             Text("Contacts on WhisprText", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                         }
                         items(matchedContacts) { user ->
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                ListItem(
-                                    leadingContent = { InitialsAvatar(id = user.username) },
-                                    headlineContent = { Text(user.username) },
-                                    supportingContent = { Text(user.phoneNumber ?: "") },
-                                    trailingContent = {
-                                        Button(onClick = { viewModel.startChat(user) }) {
-                                            Text("Chat")
-                                        }
+                            ListItem(
+                                modifier = Modifier.fillMaxWidth(),
+                                leadingContent = {
+                        InitialsAvatar(
+                            id = user.username,
+                            avatarUrl = user.avatarUrl,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    },
+                                headlineContent = { Text(user.username) },
+                                supportingContent = { Text(user.phoneNumber ?: "") },
+                                trailingContent = {
+                                    Button(onClick = { viewModel.startChat(user) }) {
+                                        Text("Chat")
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
                     }
 
@@ -178,7 +184,12 @@ fun ContactDiscoveryScreen(
                             ) {
                                 ListItem(
                                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                    leadingContent = { InitialsAvatar(id = contact.name) },
+                                    leadingContent = {
+                                        InitialsAvatar(
+                                            id = contact.name,
+                                            modifier = Modifier.size(40.dp)
+                                        )
+                                    },
                                     headlineContent = { Text(contact.name) },
                                     supportingContent = { Text(contact.phoneNumber) },
                                     trailingContent = {

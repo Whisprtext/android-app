@@ -85,7 +85,7 @@ fun ChatScreen(
                     ) {
                         if (isDirect) {
                             InitialsAvatar(
-                                id = displayTitle,
+                                id = targetUsername ?: displayTitle,
                                 avatarUrl = uiState.otherUser?.avatarUrl,
                                 modifier = Modifier.size(36.dp)
                             )
