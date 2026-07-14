@@ -20,9 +20,18 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextDecoration
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.util.ContactHelper
+import com.whisprtext.app.util.MarkdownParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,7 +41,7 @@ fun ChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
-    var textMessage by remember { mutableStateOf("") }
+    var textMessage by remember { mutableStateOf(TextFieldValue("")) }
     var messageToDelete by remember { mutableStateOf<MessageEntity?>(null) }
 
     val context = LocalContext.current
@@ -130,41 +139,143 @@ fun ChatScreen(
                 }
             }
 
-            Row(
+            val markdownTransformation = remember {
+                VisualTransformation { text ->
+                    val annotatedString = MarkdownParser.parse(text.text, hideMarkers = false)
+                    TransformedText(annotatedString, OffsetMapping.Identity)
+                }
+            }
+
+            fun applyFormatting(marker: String) {
+                val selection = textMessage.selection
+                val text = textMessage.text
+                val newText = StringBuilder()
+                val newSelectionStart: Int
+                val newSelectionEnd: Int
+
+                if (selection.collapsed) {
+                    val cursor = selection.start
+                    newText.append(text.substring(0, cursor))
+                    newText.append(marker)
+                    newText.append(marker)
+                    newText.append(text.substring(cursor))
+                    newSelectionStart = cursor + marker.length
+                    newSelectionEnd = cursor + marker.length
+                } else {
+                    val start = selection.min
+                    val end = selection.max
+                    newText.append(text.substring(0, start))
+                    newText.append(marker)
+                    newText.append(text.substring(start, end))
+                    newText.append(marker)
+                    newText.append(text.substring(end))
+                    newSelectionStart = start
+                    newSelectionEnd = end + marker.length * 2
+                }
+                textMessage = TextFieldValue(
+                    text = newText.toString(),
+                    selection = androidx.compose.ui.text.TextRange(newSelectionStart, newSelectionEnd)
+                )
+            }
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.Bottom
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
-                OutlinedTextField(
-                    value = textMessage,
-                    onValueChange = { textMessage = it },
-                    placeholder = { Text("Enter message...") },
+                Row(
                     modifier = Modifier
-                        .weight(1f),
-                    singleLine = false,
-                    maxLines = 5,
-                    shape = RoundedCornerShape(24.dp)
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                val isSendEnabled = textMessage.isNotBlank() && !uiState.isLoading
-                IconButton(
-                    onClick = {
-                        if (isSendEnabled) {
-                            viewModel.sendMessage(textMessage)
-                            textMessage = ""
-                        }
-                    },
-                    enabled = isSendEnabled,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    )
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send")
+                    IconButton(
+                        onClick = { applyFormatting("*") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "B",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { applyFormatting("_") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "I",
+                            fontStyle = FontStyle.Italic,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { applyFormatting("~") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "S",
+                            textDecoration = TextDecoration.LineThrough,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { applyFormatting("`") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "</>",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    OutlinedTextField(
+                        value = textMessage,
+                        onValueChange = { textMessage = it },
+                        placeholder = { Text("Enter message...") },
+                        modifier = Modifier
+                            .weight(1f),
+                        singleLine = false,
+                        maxLines = 5,
+                        shape = RoundedCornerShape(24.dp),
+                        visualTransformation = markdownTransformation
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    val isSendEnabled = textMessage.text.isNotBlank() && !uiState.isLoading
+                    IconButton(
+                        onClick = {
+                            if (isSendEnabled) {
+                                viewModel.sendMessage(textMessage.text)
+                                textMessage = TextFieldValue("")
+                            }
+                        },
+                        enabled = isSendEnabled,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = "Send")
+                    }
                 }
             }
         }
@@ -250,7 +361,7 @@ fun MessageBubble(
             Layout(
                 content = {
                     Text(
-                        text = message.encryptedContent,
+                        text = MarkdownParser.parse(message.encryptedContent, hideMarkers = true),
                         color = textColor,
                         fontSize = 16.sp,
                         onTextLayout = { textLayoutResult = it }
