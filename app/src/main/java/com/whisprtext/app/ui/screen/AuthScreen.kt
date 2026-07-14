@@ -116,7 +116,8 @@ fun AuthScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-                enabled = username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading
+                enabled = username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading,
+                shape = MaterialTheme.shapes.medium
             ) {
                 if (authState is AuthState.Loading) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))

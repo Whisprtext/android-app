@@ -100,7 +100,10 @@ fun ConversationListScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddContactClick) {
+            FloatingActionButton(
+                onClick = onAddContactClick,
+                shape = MaterialTheme.shapes.medium
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "New Chat")
             }
         }

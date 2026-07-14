@@ -248,7 +248,8 @@ fun ProfileScreen(
                             )
                         },
                         enabled = !isLoading && isUsernameValid,
-                        modifier = Modifier.align(Alignment.End)
+                        modifier = Modifier.align(Alignment.End),
+                        shape = MaterialTheme.shapes.medium
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null)
                         Spacer(Modifier.width(8.dp))

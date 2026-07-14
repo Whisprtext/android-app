@@ -123,8 +123,8 @@ fun ChatScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                         reverseLayout = true
                     ) {
                         itemsIndexed(uiState.messages) { index, message ->
@@ -256,13 +256,6 @@ fun ChatScreen(
                     val numberMatch = numberRegex.find(line)
                     val romanMatch = romanRegex.find(line)
                     
-                    val indent = when {
-                        bulletMatch != null -> bulletMatch.groupValues[1]
-                        numberMatch != null -> numberMatch.groupValues[1]
-                        romanMatch != null -> romanMatch.groupValues[1]
-                        else -> ""
-                    }
-                    
                     val contentWithoutPrefix = when {
                         bulletMatch != null -> line.substring(bulletMatch.range.last + 1)
                         numberMatch != null -> line.substring(numberMatch.range.last + 1)
@@ -278,41 +271,37 @@ fun ChatScreen(
                     }
                     
                     if (isCurrentSameType) {
-                        newLines[idx] = indent + contentWithoutPrefix
+                        newLines[idx] = contentWithoutPrefix
                     } else {
                         val prefix = when (listType) {
-                            "bullet" -> "- "
+                            "bullet" -> "\t- "
                             "number" -> {
                                 var nextNum = 1
-                                for (prevIdx in idx - 1 downTo 0) {
-                                    val prevLine = newLines[prevIdx]
+                                if (idx > 0) {
+                                    val prevLine = newLines[idx - 1]
                                     val prevNumMatch = numberRegex.find(prevLine)
                                     if (prevNumMatch != null) {
                                         val numStr = prevNumMatch.groupValues[2]
                                         nextNum = (numStr.toIntOrNull() ?: 0) + 1
-                                        break
                                     }
                                 }
-                                "$nextNum. "
+                                "\t$nextNum. "
                             }
                             "roman" -> {
-                                var prevRoman = "i"
-                                var foundPrev = false
-                                for (prevIdx in idx - 1 downTo 0) {
-                                    val prevLine = newLines[prevIdx]
+                                var nextRoman = "i"
+                                if (idx > 0) {
+                                    val prevLine = newLines[idx - 1]
                                     val prevRomanMatch = romanRegex.find(prevLine)
                                     if (prevRomanMatch != null) {
-                                        prevRoman = prevRomanMatch.groupValues[2]
-                                        foundPrev = true
-                                        break
+                                        val prevRoman = prevRomanMatch.groupValues[2]
+                                        nextRoman = MarkdownParser.incrementRoman(prevRoman)
                                     }
                                 }
-                                val nextRoman = if (foundPrev) MarkdownParser.incrementRoman(prevRoman) else "i"
-                                "$nextRoman. "
+                                "\t$nextRoman. "
                             }
                             else -> ""
                         }
-                        newLines[idx] = indent + prefix + contentWithoutPrefix
+                        newLines[idx] = prefix + contentWithoutPrefix
                     }
                 }
                 
@@ -323,6 +312,114 @@ fun ChatScreen(
                     text = newText,
                     selection = androidx.compose.ui.text.TextRange(newCursor, newCursor)
                 )
+            }
+
+            fun onTextMessageChange(newValue: TextFieldValue) {
+                val oldValue = textMessage
+                val oldText = oldValue.text
+                val newText = newValue.text
+                
+                if (newText.length == oldText.length + 1 && 
+                    newValue.selection.collapsed && 
+                    newValue.selection.start > 0 &&
+                    newText[newValue.selection.start - 1] == '\n'
+                ) {
+                    val newlineIdx = newValue.selection.start - 1
+                    val textBeforeNewline = newText.substring(0, newlineIdx)
+                    val lastNewlineBefore = textBeforeNewline.lastIndexOf('\n')
+                    val lastLine = if (lastNewlineBefore == -1) {
+                        textBeforeNewline
+                    } else {
+                        textBeforeNewline.substring(lastNewlineBefore + 1)
+                    }
+                    
+                    val bulletRegex = Regex("""^(\s*)([-*•])\s+(.*)$""")
+                    val numberRegex = Regex("""^(\s*)(\d+)\.\s+(.*)$""")
+                    val romanRegex = Regex("""^(\s*)([ivxldcmIVXLDCM]+)\.\s+(.*)$""")
+                    
+                    val bulletMatch = bulletRegex.matchEntire(lastLine)
+                    val numberMatch = numberRegex.matchEntire(lastLine)
+                    val romanMatch = romanRegex.matchEntire(lastLine)
+                    
+                    when {
+                        bulletMatch != null -> {
+                            val indent = bulletMatch.groupValues[1]
+                            val marker = bulletMatch.groupValues[2]
+                            val content = bulletMatch.groupValues[3]
+                            
+                            if (content.isBlank()) {
+                                val lineStartIdx = newlineIdx - lastLine.length
+                                val cleanedText = oldText.substring(0, lineStartIdx) + oldText.substring(newlineIdx)
+                                textMessage = TextFieldValue(
+                                    text = cleanedText,
+                                    selection = androidx.compose.ui.text.TextRange(lineStartIdx)
+                                )
+                                return
+                            } else {
+                                val prefix = "\n$indent$marker "
+                                val autoText = newText.substring(0, newlineIdx) + prefix + newText.substring(newlineIdx + 1)
+                                val nextCursor = newlineIdx + prefix.length
+                                textMessage = TextFieldValue(
+                                    text = autoText,
+                                    selection = androidx.compose.ui.text.TextRange(nextCursor)
+                                )
+                                return
+                            }
+                        }
+                        numberMatch != null -> {
+                            val indent = numberMatch.groupValues[1]
+                            val numStr = numberMatch.groupValues[2]
+                            val content = numberMatch.groupValues[3]
+                            
+                            if (content.isBlank()) {
+                                val lineStartIdx = newlineIdx - lastLine.length
+                                val cleanedText = oldText.substring(0, lineStartIdx) + oldText.substring(newlineIdx)
+                                textMessage = TextFieldValue(
+                                    text = cleanedText,
+                                    selection = androidx.compose.ui.text.TextRange(lineStartIdx)
+                                )
+                                return
+                            } else {
+                                val nextNum = (numStr.toIntOrNull() ?: 1) + 1
+                                val prefix = "\n$indent$nextNum. "
+                                val autoText = newText.substring(0, newlineIdx) + prefix + newText.substring(newlineIdx + 1)
+                                val nextCursor = newlineIdx + prefix.length
+                                textMessage = TextFieldValue(
+                                    text = autoText,
+                                    selection = androidx.compose.ui.text.TextRange(nextCursor)
+                                )
+                                return
+                            }
+                        }
+                        romanMatch != null -> {
+                            val indent = romanMatch.groupValues[1]
+                            val romanStr = romanMatch.groupValues[2]
+                            val content = romanMatch.groupValues[3]
+                            
+                            if (content.isBlank()) {
+                                val lineStartIdx = newlineIdx - lastLine.length
+                                val cleanedText = oldText.substring(0, lineStartIdx) + oldText.substring(newlineIdx)
+                                textMessage = TextFieldValue(
+                                    text = cleanedText,
+                                    selection = androidx.compose.ui.text.TextRange(lineStartIdx)
+                                )
+                                return
+                            } else {
+                                val nextRoman = MarkdownParser.incrementRoman(romanStr)
+                                val prefix = "\n$indent$nextRoman. "
+                                val autoText = newText.substring(0, newlineIdx) + prefix + newText.substring(newlineIdx + 1)
+                                val nextCursor = newlineIdx + prefix.length
+                                textMessage = TextFieldValue(
+                                    text = autoText,
+                                    selection = androidx.compose.ui.text.TextRange(nextCursor)
+                                )
+                                return
+                            }
+                        }
+                    }
+                }
+                
+                textMessage = newValue
             }
 
             Column(
@@ -432,13 +529,13 @@ fun ChatScreen(
                 ) {
                     OutlinedTextField(
                         value = textMessage,
-                        onValueChange = { textMessage = it },
+                        onValueChange = { onTextMessageChange(it) },
                         placeholder = { Text("Enter message...") },
                         modifier = Modifier
                             .weight(1f),
                         singleLine = false,
                         maxLines = 5,
-                        shape = RoundedCornerShape(24.dp),
+                        shape = MaterialTheme.shapes.small,
                         visualTransformation = markdownTransformation
                     )
 
@@ -514,25 +611,20 @@ fun MessageBubble(
     val textColor = if (isSelf) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (isSelf) Alignment.End else Alignment.Start
 
-    val topStartRadius = 12.dp
-    val bottomStartRadius = 12.dp
-    val topEndRadius = 12.dp
-    val bottomEndRadius = 12.dp
-
     val bubbleShape = RoundedCornerShape(
-        topStart = if (!isSelf && !isGroupHeader) 4.dp else topStartRadius,
-        topEnd = if (isSelf && !isGroupHeader) 4.dp else topEndRadius,
-        bottomStart = if (!isSelf && !isGroupFooter) 4.dp else bottomStartRadius,
-        bottomEnd = if (isSelf && !isGroupFooter) 4.dp else bottomEndRadius
+        topStart = if (!isSelf) 0.dp else (if (isGroupHeader) 6.dp else 2.dp),
+        topEnd = if (isSelf) 0.dp else (if (isGroupHeader) 6.dp else 2.dp),
+        bottomStart = if (!isSelf) 0.dp else (if (isGroupFooter) 6.dp else 2.dp),
+        bottomEnd = if (isSelf) 0.dp else (if (isGroupFooter) 6.dp else 2.dp)
     )
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = alignment
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
+                .fillMaxWidth(0.85f)
                 .clip(bubbleShape)
                 .background(bubbleColor)
                 .combinedClickable(
