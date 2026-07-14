@@ -207,6 +207,124 @@ fun ChatScreen(
                 )
             }
 
+            fun toggleListFormatting(listType: String) {
+                val selection = textMessage.selection
+                val text = textMessage.text
+                
+                val lines = text.split('\n')
+                val lineOffsets = mutableListOf<Pair<Int, Int>>()
+                var currentOffset = 0
+                for (line in lines) {
+                    val start = currentOffset
+                    val end = currentOffset + line.length
+                    lineOffsets.add(Pair(start, end))
+                    currentOffset = end + 1
+                }
+                
+                val selectedLineIndices = mutableListOf<Int>()
+                val selMin = selection.min
+                val selMax = selection.max
+                
+                for (i in lineOffsets.indices) {
+                    val (start, end) = lineOffsets[i]
+                    if (selection.collapsed) {
+                        if (selMin in start..end) {
+                            selectedLineIndices.add(i)
+                        }
+                    } else {
+                        if (Math.max(start, selMin) <= Math.min(end, selMax)) {
+                            selectedLineIndices.add(i)
+                        }
+                    }
+                }
+                
+                if (selectedLineIndices.isEmpty() && lines.isNotEmpty()) {
+                    selectedLineIndices.add(0)
+                }
+                
+                val bulletRegex = Regex("""^(\s*)([-*•])\s+""")
+                val numberRegex = Regex("""^(\s*)(\d+)\.\s+""")
+                val romanRegex = Regex("""^(\s*)([ivxldcmIVXLDCM]+)\.\s+""")
+                
+                val newLines = lines.toMutableList()
+                
+                for (idx in selectedLineIndices) {
+                    if (idx >= newLines.size) continue
+                    val line = newLines[idx]
+                    
+                    val bulletMatch = bulletRegex.find(line)
+                    val numberMatch = numberRegex.find(line)
+                    val romanMatch = romanRegex.find(line)
+                    
+                    val indent = when {
+                        bulletMatch != null -> bulletMatch.groupValues[1]
+                        numberMatch != null -> numberMatch.groupValues[1]
+                        romanMatch != null -> romanMatch.groupValues[1]
+                        else -> ""
+                    }
+                    
+                    val contentWithoutPrefix = when {
+                        bulletMatch != null -> line.substring(bulletMatch.range.last + 1)
+                        numberMatch != null -> line.substring(numberMatch.range.last + 1)
+                        romanMatch != null -> line.substring(romanMatch.range.last + 1)
+                        else -> line
+                    }
+                    
+                    val isCurrentSameType = when (listType) {
+                        "bullet" -> bulletMatch != null
+                        "number" -> numberMatch != null
+                        "roman" -> romanMatch != null
+                        else -> false
+                    }
+                    
+                    if (isCurrentSameType) {
+                        newLines[idx] = indent + contentWithoutPrefix
+                    } else {
+                        val prefix = when (listType) {
+                            "bullet" -> "- "
+                            "number" -> {
+                                var nextNum = 1
+                                for (prevIdx in idx - 1 downTo 0) {
+                                    val prevLine = newLines[prevIdx]
+                                    val prevNumMatch = numberRegex.find(prevLine)
+                                    if (prevNumMatch != null) {
+                                        val numStr = prevNumMatch.groupValues[2]
+                                        nextNum = (numStr.toIntOrNull() ?: 0) + 1
+                                        break
+                                    }
+                                }
+                                "$nextNum. "
+                            }
+                            "roman" -> {
+                                var prevRoman = "i"
+                                var foundPrev = false
+                                for (prevIdx in idx - 1 downTo 0) {
+                                    val prevLine = newLines[prevIdx]
+                                    val prevRomanMatch = romanRegex.find(prevLine)
+                                    if (prevRomanMatch != null) {
+                                        prevRoman = prevRomanMatch.groupValues[2]
+                                        foundPrev = true
+                                        break
+                                    }
+                                }
+                                val nextRoman = if (foundPrev) MarkdownParser.incrementRoman(prevRoman) else "i"
+                                "$nextRoman. "
+                            }
+                            else -> ""
+                        }
+                        newLines[idx] = indent + prefix + contentWithoutPrefix
+                    }
+                }
+                
+                val newText = newLines.joinToString("\n")
+                val newCursor = newText.length
+                
+                textMessage = TextFieldValue(
+                    text = newText,
+                    selection = androidx.compose.ui.text.TextRange(newCursor, newCursor)
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -263,6 +381,44 @@ fun ChatScreen(
                             text = "</>",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    VerticalDivider(modifier = Modifier.height(20.dp).padding(horizontal = 4.dp))
+
+                    IconButton(
+                        onClick = { toggleListFormatting("bullet") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "•=",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { toggleListFormatting("number") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "1.",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { toggleListFormatting("roman") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text(
+                            text = "i.",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }

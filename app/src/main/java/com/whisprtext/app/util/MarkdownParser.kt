@@ -19,9 +19,79 @@ object MarkdownParser {
     )
     private val markerStyle = SpanStyle(color = Color.Gray.copy(alpha = 0.5f))
 
+    private val bulletRegex = Regex("""^(\s*)([-*•])\s+(.+)$""")
+    private val numberedRegex = Regex("""^(\s*)(\d+)\.\s+(.+)$""")
+    private val romanRegex = Regex("""^(\s*)([ivxldcmIVXLDCM]+)\.\s+(.+)$""")
+
     fun parse(text: String, hideMarkers: Boolean): AnnotatedString {
         return buildAnnotatedString {
-            parseInternal(text, hideMarkers, emptyList())
+            val lines = text.split('\n')
+            lines.forEachIndexed { index, line ->
+                if (index > 0) {
+                    append('\n')
+                }
+
+                val bulletMatch = bulletRegex.matchEntire(line)
+                val numberedMatch = numberedRegex.matchEntire(line)
+                val romanMatch = romanRegex.matchEntire(line)
+
+                when {
+                    bulletMatch != null -> {
+                        val indent = bulletMatch.groupValues[1]
+                        val marker = bulletMatch.groupValues[2]
+                        val content = bulletMatch.groupValues[3]
+                        
+                        append(indent)
+                        if (hideMarkers) {
+                            pushStyle(boldStyle)
+                            append("•  ")
+                            pop()
+                        } else {
+                            pushStyle(markerStyle)
+                            append("$marker ")
+                            pop()
+                        }
+                        parseInternal(content, hideMarkers, emptyList())
+                    }
+                    numberedMatch != null -> {
+                        val indent = numberedMatch.groupValues[1]
+                        val num = numberedMatch.groupValues[2]
+                        val content = numberedMatch.groupValues[3]
+                        
+                        append(indent)
+                        if (hideMarkers) {
+                            pushStyle(boldStyle)
+                            append("$num. ")
+                            pop()
+                        } else {
+                            pushStyle(markerStyle)
+                            append("$num. ")
+                            pop()
+                        }
+                        parseInternal(content, hideMarkers, emptyList())
+                    }
+                    romanMatch != null -> {
+                        val indent = romanMatch.groupValues[1]
+                        val roman = romanMatch.groupValues[2]
+                        val content = romanMatch.groupValues[3]
+                        
+                        append(indent)
+                        if (hideMarkers) {
+                            pushStyle(boldStyle)
+                            append("$roman. ")
+                            pop()
+                        } else {
+                            pushStyle(markerStyle)
+                            append("$roman. ")
+                            pop()
+                        }
+                        parseInternal(content, hideMarkers, emptyList())
+                    }
+                    else -> {
+                        parseInternal(line, hideMarkers, emptyList())
+                    }
+                }
+            }
         }
     }
 
@@ -100,5 +170,44 @@ object MarkdownParser {
             idx++
         }
         return -1
+    }
+
+    fun incrementRoman(roman: String): String {
+        val isUpper = roman.all { it.isUpperCase() }
+        val normalRoman = roman.uppercase()
+        val value = romanToDecimal(normalRoman)
+        val nextValue = value + 1
+        val nextRoman = decimalToRoman(nextValue)
+        return if (isUpper) nextRoman else nextRoman.lowercase()
+    }
+
+    fun romanToDecimal(roman: String): Int {
+        val map = mapOf('I' to 1, 'V' to 5, 'X' to 10, 'L' to 50, 'C' to 100, 'D' to 500, 'M' to 1000)
+        var decimal = 0
+        var prev = 0
+        for (i in roman.length - 1 downTo 0) {
+            val current = map[roman[i]] ?: 0
+            if (current < prev) {
+                decimal -= current
+            } else {
+                decimal += current
+            }
+            prev = current
+        }
+        return decimal
+    }
+
+    fun decimalToRoman(num: Int): String {
+        val values = intArrayOf(1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1)
+        val symbols = arrayOf("M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I")
+        val sb = java.lang.StringBuilder()
+        var temp = num
+        for (i in values.indices) {
+            while (temp >= values[i]) {
+                temp -= values[i]
+                sb.append(symbols[i])
+            }
+        }
+        return sb.toString()
     }
 }
