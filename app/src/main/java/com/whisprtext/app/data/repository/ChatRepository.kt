@@ -124,24 +124,13 @@ class ChatRepository(
 
             val entities = remoteSummaries.map { it.toEntity() }
             conversationDao.insertAll(entities)
-
-            val latestMessages = remoteSummaries.mapNotNull { it.lastMessage?.toEntity("sent") }
-            if (latestMessages.isNotEmpty()) {
-                upsertMessages(latestMessages)
-            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     suspend fun syncMessages(conversationId: String) {
-        try {
-            val remoteMessages = apiClient.getMessages(conversationId)
-            val entities = remoteMessages.map { it.toEntity("sent") }
-            upsertMessages(entities)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // No-op to prevent message backfill from cloud history.
     }
 
 
@@ -189,9 +178,11 @@ class ChatRepository(
     suspend fun syncDelta() {
         try {
             val since = preferencesManager.lastSyncTime.first()
-            // On first launch or after reinstall, since is null — fetch all messages & conversations.
             if (since == null) {
                 syncConversations()
+                val nowStr = java.time.Instant.now().toString()
+                preferencesManager.saveLastSyncTime(nowStr)
+                return
             }
             val delta = apiClient.sync(since)
             val currentUserId = preferencesManager.userId.first()
@@ -214,7 +205,6 @@ class ChatRepository(
                     val latest = msgs.maxByOrNull { it.createdAt.toEpochMillis() }
                     val conv = conversationDao.getById(convId)
                     if (conv == null) {
-                        // Re-discover any conversation we don't have locally.
                         syncConversations()
                         break
                     } else if (latest != null) {
@@ -324,17 +314,18 @@ class ChatRepository(
 
     suspend fun createConversation(type: String, members: List<String>): ConversationEntity {
         val response = apiClient.createConversation(type, members)
+        val existingLocal = conversationDao.getById(response.id)
         val entity = ConversationEntity(
             id = response.id,
             type = response.type,
             createdAt = response.createdAt.toEpochMillis(),
-            unreadCount = 0,
-            lastMessageText = null,
-            lastMessageTime = null,
-            title = response.displayName ?: response.username,
-            username = response.username,
-            phoneNumber = response.phoneNumber,
-            avatarUrl = response.avatarUrl
+            unreadCount = existingLocal?.unreadCount ?: 0,
+            lastMessageText = existingLocal?.lastMessageText,
+            lastMessageTime = existingLocal?.lastMessageTime,
+            title = response.displayName ?: response.username ?: existingLocal?.title,
+            username = response.username ?: existingLocal?.username,
+            phoneNumber = response.phoneNumber ?: existingLocal?.phoneNumber,
+            avatarUrl = response.avatarUrl ?: existingLocal?.avatarUrl
         )
         conversationDao.insert(entity)
         return entity
@@ -342,20 +333,26 @@ class ChatRepository(
 
     suspend fun createDirectConversation(targetUserId: String?, username: String?, avatarUrl: String? = null): ConversationEntity {
         val response = apiClient.createDirectConversation(targetUserId, username)
+        val existingLocal = conversationDao.getById(response.id)
         val entity = ConversationEntity(
             id = response.id,
             type = response.type,
             createdAt = response.createdAt.toEpochMillis(),
-            unreadCount = 0,
-            lastMessageText = null,
-            lastMessageTime = null,
-            title = response.displayName ?: response.username ?: targetUserId ?: username,
-            username = response.username,
-            phoneNumber = response.phoneNumber,
-            avatarUrl = response.avatarUrl ?: avatarUrl
+            unreadCount = existingLocal?.unreadCount ?: 0,
+            lastMessageText = existingLocal?.lastMessageText,
+            lastMessageTime = existingLocal?.lastMessageTime,
+            title = response.displayName ?: response.username ?: existingLocal?.title ?: targetUserId ?: username,
+            username = response.username ?: existingLocal?.username,
+            phoneNumber = response.phoneNumber ?: existingLocal?.phoneNumber,
+            avatarUrl = response.avatarUrl ?: avatarUrl ?: existingLocal?.avatarUrl
         )
         conversationDao.insert(entity)
         return entity
+    }
+
+    suspend fun getDirectConversationByContact(username: String?, phoneNumber: String?): ConversationEntity? {
+        if (username.isNullOrEmpty() && phoneNumber.isNullOrEmpty()) return null
+        return conversationDao.getDirectConversationByContact(username, phoneNumber)
     }
 
     suspend fun searchUserByUsername(username: String) = apiClient.searchUserByUsername(username)

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ConversationDao {
-    @Query("SELECT * FROM conversations ORDER BY lastMessageTime DESC, createdAt DESC")
+    @Query("SELECT * FROM conversations WHERE id IN (SELECT DISTINCT conversationId FROM messages) ORDER BY COALESCE(lastMessageTime, createdAt) DESC")
     fun getConversationsFlow(): Flow<List<ConversationEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -23,6 +23,9 @@ interface ConversationDao {
 
     @Query("SELECT * FROM conversations WHERE id = :id")
     fun getByIdFlow(id: String): Flow<ConversationEntity?>
+
+    @Query("SELECT * FROM conversations WHERE (username = :username OR phoneNumber = :phoneNumber) AND type = 'direct' LIMIT 1")
+    suspend fun getDirectConversationByContact(username: String?, phoneNumber: String?): ConversationEntity?
 
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteById(id: String)

@@ -232,9 +232,9 @@ fun ConversationItem(
         if (conversation.type == "direct") {
             val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
             if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
-                contactsMap[normalizedPhone] ?: conversation.username ?: "Chat"
+                contactsMap[normalizedPhone] ?: conversation.title ?: conversation.username ?: "Chat"
             } else {
-                conversation.username ?: "Chat"
+                conversation.title ?: conversation.username ?: "Chat"
             }
         } else {
             conversation.title ?: "Chat"

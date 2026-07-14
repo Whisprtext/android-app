@@ -78,17 +78,7 @@ class ChatViewModel(
     }
 
     fun sync() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                chatRepository.syncMessages(conversationId)
-            } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to sync messages"
-            } finally {
-                _isLoading.value = false
-            }
-        }
+        // No-op to prevent message history backfill.
     }
 
     fun sendMessage(content: String) {

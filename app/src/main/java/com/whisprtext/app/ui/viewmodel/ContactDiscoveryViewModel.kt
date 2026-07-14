@@ -92,8 +92,13 @@ class ContactDiscoveryViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val conversation = chatRepository.createDirectConversation(user.id, null, user.avatarUrl)
-                _chatCreated.emit(conversation)
+                val existing = chatRepository.getDirectConversationByContact(user.username, user.phoneNumber)
+                if (existing != null) {
+                    _chatCreated.emit(existing)
+                } else {
+                    val conversation = chatRepository.createDirectConversation(user.id, null, user.avatarUrl)
+                    _chatCreated.emit(conversation)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 _error.emit("Failed to start chat: ${e.localizedMessage}")
