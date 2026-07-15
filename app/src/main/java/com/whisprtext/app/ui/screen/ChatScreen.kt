@@ -11,8 +11,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,7 +31,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TransformedText
@@ -40,6 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.component.DoodleBackground
 import com.whisprtext.app.ui.theme.AppearancePresets
@@ -60,15 +66,16 @@ fun ChatScreen(
     val currentUserId by viewModel.currentUserId.collectAsState()
     val appearance = uiState.appearanceSettings
     val isDark = isSystemInDarkTheme()
-    val theme = AppearancePresets.getTheme(appearance.presetId)
+    val theme = remember(appearance.presetId) { AppearancePresets.getTheme(appearance.presetId) }
 
-    val backgroundColor = if (isDark) theme.backgroundColorDark else theme.backgroundColorLight
-    val gradientColors = if (isDark) theme.gradientColorsDark else theme.gradientColorsLight
-    
-    val backgroundModifier = if (theme.isGradient) {
-        Modifier.background(Brush.verticalGradient(gradientColors))
-    } else {
-        Modifier.background(backgroundColor)
+    val backgroundModifier = remember(theme, isDark) {
+        val gradientColors = if (isDark) theme.gradientColorsDark else theme.gradientColorsLight
+        val backgroundColor = if (isDark) theme.backgroundColorDark else theme.backgroundColorLight
+        if (theme.isGradient) {
+            Modifier.background(Brush.verticalGradient(gradientColors))
+        } else {
+            Modifier.background(backgroundColor)
+        }
     }
 
     var textMessage by remember { mutableStateOf(TextFieldValue("")) }
@@ -140,7 +147,7 @@ fun ChatScreen(
     fun toggleListFormatting(listType: String) {
         val selection = textMessage.selection
         val text = textMessage.text
-        
+
         val lines = text.split('\n')
         val lineOffsets = mutableListOf<Pair<Int, Int>>()
         var currentOffset = 0
@@ -150,11 +157,11 @@ fun ChatScreen(
             lineOffsets.add(Pair(start, end))
             currentOffset = end + 1
         }
-        
+
         val selectedLineIndices = mutableListOf<Int>()
         val selMin = selection.min
         val selMax = selection.max
-        
+
         for (i in lineOffsets.indices) {
             val (start, end) = lineOffsets[i]
             if (selection.collapsed) {
@@ -167,39 +174,39 @@ fun ChatScreen(
                 }
             }
         }
-        
+
         if (selectedLineIndices.isEmpty() && lines.isNotEmpty()) {
             selectedLineIndices.add(0)
         }
-        
+
         val bulletRegex = Regex("""^(\s*)([-*•])\s+""")
         val numberRegex = Regex("""^(\s*)(\d+)\.\s+""")
         val romanRegex = Regex("""^(\s*)([ivxldcmIVXLDCM]+)\.\s+""")
-        
+
         val newLines = lines.toMutableList()
-        
+
         for (idx in selectedLineIndices) {
             if (idx >= newLines.size) continue
             val line = newLines[idx]
-            
+
             val bulletMatch = bulletRegex.find(line)
             val numberMatch = numberRegex.find(line)
             val romanMatch = romanRegex.find(line)
-            
+
             val contentWithoutPrefix = when {
                 bulletMatch != null -> line.substring(bulletMatch.range.last + 1)
                 numberMatch != null -> line.substring(numberMatch.range.last + 1)
                 romanMatch != null -> line.substring(romanMatch.range.last + 1)
                 else -> line
             }
-            
+
             val isCurrentSameType = when (listType) {
                 "bullet" -> bulletMatch != null
                 "number" -> numberMatch != null
                 "roman" -> romanMatch != null
                 else -> false
             }
-            
+
             if (isCurrentSameType) {
                 newLines[idx] = contentWithoutPrefix
             } else {
@@ -234,10 +241,10 @@ fun ChatScreen(
                 newLines[idx] = prefix + contentWithoutPrefix
             }
         }
-        
+
         val newText = newLines.joinToString("\n")
         val newCursor = newText.length
-        
+
         textMessage = TextFieldValue(
             text = newText,
             selection = androidx.compose.ui.text.TextRange(newCursor, newCursor)
@@ -358,10 +365,12 @@ fun ChatScreen(
             .then(backgroundModifier)
     ) {
         if (appearance.useDoodles) {
+            val doodleModifier = remember { Modifier.graphicsLayer() }
             DoodleBackground(
                 style = appearance.doodleStyle,
                 alpha = appearance.doodleAlpha,
-                color = if (isDark) Color.White else Color.Black
+                color = if (isDark) Color.White else Color.Black,
+                modifier = doodleModifier
             )
         }
 
@@ -369,12 +378,7 @@ fun ChatScreen(
             containerColor = Color.Transparent,
             topBar = {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().animateContentSize(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
                     shadowElevation = 4.dp,
                     color = MaterialTheme.colorScheme.surface,
@@ -439,18 +443,42 @@ fun ChatScreen(
                                     }
                                 } else {
                                     Text(
-                                        text = "Profile",
+                                        text = displayTitle,
                                         style = MaterialTheme.typography.titleMedium,
                                         modifier = Modifier.padding(start = 8.dp)
                                     )
+                                }
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { /* Voice Call */ }) {
+                                    Icon(Icons.Default.Phone, contentDescription = "Voice Call")
+                                }
+                                IconButton(onClick = { /* Video Call */ }) {
+                                    Icon(Icons.Default.Videocam, contentDescription = "Video Call")
+                                }
+                                IconButton(onClick = { /* Menu */ }) {
+                                    Icon(Icons.Default.Menu, contentDescription = "Menu")
                                 }
                             }
                         }
 
                         AnimatedVisibility(
                             visible = isHeaderExpanded,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut()
+                            enter = expandVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            ) + fadeIn(animationSpec = tween(500)),
+                            exit = shrinkVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            ) + fadeOut(animationSpec = tween(400))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -464,17 +492,17 @@ fun ChatScreen(
                                     InitialsAvatar(
                                         id = targetUsername ?: displayTitle,
                                         avatarUrl = otherUser?.avatarUrl,
-                                        modifier = Modifier.size(100.dp),
-                                        fontSize = 40.sp
+                                        modifier = Modifier
+                                            .size(200.dp)
+                                            .clickable {
+                                                if (targetUsername != null) {
+                                                    onProfileClick(targetUsername)
+                                                }
+                                            },
+                                        fontSize = 80.sp
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                 }
-
-                                Text(
-                                    text = displayTitle,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    textAlign = TextAlign.Center
-                                )
 
                                 if (otherUser?.bio?.isNotEmpty() == true) {
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -503,34 +531,6 @@ fun ChatScreen(
                                         Text(
                                             text = otherUser.phoneNumber,
                                             style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(24.dp))
-
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            if (targetUsername != null) {
-                                                onProfileClick(targetUsername)
-                                            }
-                                        }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            text = "View full profile",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        Icon(
-                                            imageVector = Icons.Default.KeyboardArrowDown,
-                                            contentDescription = "View Full Profile",
-                                            modifier = Modifier.size(24.dp),
-                                            tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
@@ -570,7 +570,11 @@ fun ChatScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             reverseLayout = true
                         ) {
-                            itemsIndexed(uiState.messages) { index, message ->
+                            itemsIndexed(
+                                items = uiState.messages,
+                                key = { _, message -> message.id },
+                                contentType = { _, _ -> "message" }
+                            ) { index, message ->
                                 val isSelf = message.senderId == currentUserId
 
                                 val isSameSenderAsNext = index < uiState.messages.size - 1 && 
@@ -593,7 +597,7 @@ fun ChatScreen(
                                     isGroupFooter = isGroupFooter,
                                     theme = theme,
                                     isDark = isDark,
-                                    onLongClick = { messageToDelete = message }
+                                    onLongClick = remember(message.id) { { messageToDelete = message } }
                                 )
                             }
                         }
@@ -721,40 +725,89 @@ fun ChatScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.Bottom
                         ) {
                             OutlinedTextField(
                                 value = textMessage,
                                 onValueChange = { onTextMessageChange(it) },
-                                placeholder = { Text("Enter message...") },
-                                modifier = Modifier
-                                    .weight(1f),
+                                placeholder = { Text("Enter message...", fontSize = 14.sp) },
+                                modifier = Modifier.weight(1f),
                                 singleLine = false,
                                 maxLines = 5,
-                                shape = RoundedCornerShape(20.dp),
-                                visualTransformation = markdownTransformation
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            val isSendEnabled = textMessage.text.isNotBlank() && !uiState.isLoading
-                            IconButton(
-                                onClick = {
-                                    if (isSendEnabled) {
-                                        viewModel.sendMessage(textMessage.text)
-                                        textMessage = TextFieldValue("")
+                                shape = RoundedCornerShape(24.dp),
+                                visualTransformation = markdownTransformation,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                ),
+                                leadingIcon = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 4.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = { /* Emoji */ },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.SentimentSatisfiedAlt,
+                                                contentDescription = "Emoji",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { /* Media */ },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.AddPhotoAlternate,
+                                                contentDescription = "Media",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 },
-                                enabled = isSendEnabled,
-                                modifier = Modifier.padding(bottom = 4.dp),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.primary,
-                                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                )
-                            ) {
-                                Icon(Icons.Default.Send, contentDescription = "Send")
-                            }
+                                trailingIcon = {
+                                    val isSendMode = textMessage.text.isNotBlank()
+                                    AnimatedContent(
+                                        targetState = isSendMode,
+                                        transitionSpec = {
+                                            (fadeIn(animationSpec = tween(220, delayMillis = 90)) + 
+                                             scaleIn(initialScale = 0.8f, animationSpec = tween(220, delayMillis = 90)))
+                                            .togetherWith(fadeOut(animationSpec = tween(90)) + scaleOut(targetScale = 0.8f, animationSpec = tween(90)))
+                                        },
+                                        label = "SendMicAnimation"
+                                    ) { targetIsSendMode ->
+                                        if (targetIsSendMode) {
+                                            IconButton(
+                                                onClick = {
+                                                    if (!uiState.isLoading) {
+                                                        viewModel.sendMessage(textMessage.text)
+                                                        textMessage = TextFieldValue("")
+                                                    }
+                                                },
+                                                modifier = Modifier.padding(end = 4.dp).size(36.dp),
+                                                colors = IconButtonDefaults.iconButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.primary
+                                                )
+                                            ) {
+                                                Icon(Icons.Default.Send, contentDescription = "Send")
+                                            }
+                                        } else {
+                                            IconButton(
+                                                onClick = { /* Record Voice */ },
+                                                modifier = Modifier.padding(end = 4.dp).size(36.dp),
+                                                colors = IconButtonDefaults.iconButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            ) {
+                                                Icon(Icons.Default.Mic, contentDescription = "Voice")
+                                            }
+                                        }
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -808,20 +861,36 @@ fun MessageBubble(
     isDark: Boolean,
     onLongClick: () -> Unit
 ) {
-    val bubbleColor = if (isSelf) {
-        if (isDark) theme.selfBubbleColorDark else theme.selfBubbleColorLight
-    } else {
-        if (isDark) theme.otherBubbleColorDark else theme.otherBubbleColorLight
+    val bubbleColor = remember(isSelf, isDark, theme) {
+        if (isSelf) {
+            if (isDark) theme.selfBubbleColorDark else theme.selfBubbleColorLight
+        } else {
+            if (isDark) theme.otherBubbleColorDark else theme.otherBubbleColorLight
+        }
     }
     val textColor = if (isDark) Color.White else Color.Black
     val alignment = if (isSelf) Alignment.End else Alignment.Start
 
-    val bubbleShape = RoundedCornerShape(
-        topStart = if (!isSelf) 0.dp else (if (isGroupHeader) 12.dp else 4.dp),
-        topEnd = if (isSelf) 0.dp else (if (isGroupHeader) 12.dp else 4.dp),
-        bottomStart = if (!isSelf) 0.dp else (if (isGroupFooter) 12.dp else 4.dp),
-        bottomEnd = if (isSelf) 0.dp else (if (isGroupFooter) 12.dp else 4.dp)
-    )
+    val bubbleShape = remember(isSelf, isGroupHeader, isGroupFooter) {
+        RoundedCornerShape(
+            topStart = if (!isSelf) 0.dp else (if (isGroupHeader) 12.dp else 4.dp),
+            topEnd = if (isSelf) 0.dp else (if (isGroupHeader) 12.dp else 4.dp),
+            bottomStart = if (!isSelf) 0.dp else (if (isGroupFooter) 12.dp else 4.dp),
+            bottomEnd = if (isSelf) 0.dp else (if (isGroupFooter) 12.dp else 4.dp)
+        )
+    }
+
+    val parsedContent = remember(message.encryptedContent) {
+        MarkdownParser.parse(message.encryptedContent, hideMarkers = true)
+    }
+
+    val textMeasurer = rememberTextMeasurer()
+    val textStyle = remember(textColor) {
+        TextStyle(
+            color = textColor,
+            fontSize = 16.sp
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -830,7 +899,10 @@ fun MessageBubble(
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.85f)
-                .clip(bubbleShape)
+                .graphicsLayer {
+                    shape = bubbleShape
+                    clip = true
+                }
                 .background(bubbleColor)
                 .combinedClickable(
                     onLongClick = onLongClick,
@@ -838,41 +910,43 @@ fun MessageBubble(
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-
             Layout(
                 content = {
-                    Text(
-                        text = MarkdownParser.parse(message.encryptedContent, hideMarkers = true),
-                        color = textColor,
-                        fontSize = 16.sp,
-                        onTextLayout = { textLayoutResult = it }
+                    androidx.compose.foundation.text.BasicText(
+                        text = parsedContent,
+                        style = textStyle
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        val timeInstant = java.time.Instant.ofEpochMilli(message.createdAt)
-                        val timeStr = java.time.LocalDateTime.ofInstant(timeInstant, java.time.ZoneId.systemDefault())
-                            .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+                        val timeStr = remember(message.createdAt) {
+                            val timeInstant = java.time.Instant.ofEpochMilli(message.createdAt)
+                            java.time.LocalDateTime.ofInstant(timeInstant, java.time.ZoneId.systemDefault())
+                                .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+                        }
                         Text(
                             text = timeStr,
                             fontSize = 10.sp,
                             color = textColor.copy(alpha = 0.6f)
                         )
                         if (isSelf) {
-                            val statusText = when (message.syncStatus) {
-                                "pending" -> "🕒"
-                                "failed" -> "✕"
-                                "sent" -> "✓"
-                                "delivered" -> "✓✓"
-                                "read" -> "✓✓✓"
-                                else -> "✓"
+                            val statusText = remember(message.syncStatus) {
+                                when (message.syncStatus) {
+                                    "pending" -> "🕒"
+                                    "failed" -> "✕"
+                                    "sent" -> "✓"
+                                    "delivered" -> "✓✓"
+                                    "read" -> "✓✓✓"
+                                    else -> "✓"
+                                }
                             }
-                            val statusColor = when (message.syncStatus) {
-                                "failed" -> androidx.compose.ui.graphics.Color.Red
-                                "read" -> androidx.compose.ui.graphics.Color(0xFF34B7F1)
-                                else -> textColor.copy(alpha = 0.6f)
+                            val statusColor = remember(message.syncStatus, textColor) {
+                                when (message.syncStatus) {
+                                    "failed" -> androidx.compose.ui.graphics.Color.Red
+                                    "read" -> androidx.compose.ui.graphics.Color(0xFF34B7F1)
+                                    else -> textColor.copy(alpha = 0.6f)
+                                }
                             }
                             Text(
                                 text = statusText,
@@ -883,27 +957,25 @@ fun MessageBubble(
                     }
                 }
             ) { measurables, constraints ->
+                val textLayoutResult = textMeasurer.measure(
+                    text = parsedContent,
+                    style = textStyle,
+                    constraints = constraints
+                )
+                
                 val textPlaceable = measurables[0].measure(constraints)
                 val timePlaceable = measurables[1].measure(constraints.copy(minWidth = 0))
 
                 val parentWidth = constraints.maxWidth
 
-                // Retrieve text layout details
-                val layoutResult = textLayoutResult
-                val lineCount = layoutResult?.lineCount ?: 0
-                
-                // If we have text layout info, we can determine the last line width
-                val lastLineRight = if (lineCount > 0) layoutResult?.getLineRight(lineCount - 1) ?: 0f else 0f
-                val lastLineLeft = if (lineCount > 0) layoutResult?.getLineLeft(lineCount - 1) ?: 0f else 0f
+                val lineCount = textLayoutResult.lineCount
+                val lastLineRight = if (lineCount > 0) textLayoutResult.getLineRight(lineCount - 1) else 0f
+                val lastLineLeft = if (lineCount > 0) textLayoutResult.getLineLeft(lineCount - 1) else 0f
                 val lastLineWidth = lastLineRight - lastLineLeft
 
                 val spacingPx = (8 * density).toInt()
-                
-                // We check if it fits on the last line.
-                // It fits if the last line width + spacing + timestamp width is <= parentWidth
                 val fitsOnLastLine = lineCount > 0 && (lastLineWidth + spacingPx + timePlaceable.width <= parentWidth)
 
-                // Calculate height
                 val layoutHeight = if (fitsOnLastLine) {
                     maxOf(textPlaceable.height, timePlaceable.height)
                 } else {
@@ -911,21 +983,11 @@ fun MessageBubble(
                 }
 
                 layout(parentWidth, layoutHeight) {
-                    // Place the text at the top-left
                     textPlaceable.placeRelative(0, 0)
-
-                    // Place the timestamp at the bottom-right of the layout
-                    if (fitsOnLastLine) {
-                        timePlaceable.placeRelative(
-                            x = parentWidth - timePlaceable.width,
-                            y = layoutHeight - timePlaceable.height
-                        )
-                    } else {
-                        timePlaceable.placeRelative(
-                            x = parentWidth - timePlaceable.width,
-                            y = textPlaceable.height
-                        )
-                    }
+                    timePlaceable.placeRelative(
+                        x = parentWidth - timePlaceable.width,
+                        y = layoutHeight - timePlaceable.height
+                    )
                 }
             }
         }

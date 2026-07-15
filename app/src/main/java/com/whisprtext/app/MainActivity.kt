@@ -45,6 +45,7 @@ import android.os.Build
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Log
+import android.view.WindowManager
 
 import kotlinx.coroutines.flow.first
 import androidx.lifecycle.lifecycleScope
@@ -80,6 +81,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Request maximum refresh rate for smoothest animations
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val modes = display?.supportedModes
+            val maxMode = modes?.maxByOrNull { it.refreshRate }
+            if (maxMode != null) {
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = maxMode.modeId
+                }
+            }
+        }
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {

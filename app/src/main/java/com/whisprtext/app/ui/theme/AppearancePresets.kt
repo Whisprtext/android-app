@@ -1,7 +1,9 @@
 package com.whisprtext.app.ui.theme
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
+@Immutable
 data class ChatTheme(
     val id: String,
     val name: String,
