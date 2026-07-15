@@ -48,7 +48,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      * Called when a data-only FCM message is received.
      *
      * This fires in ALL app states (foreground, background, killed) for data-only messages.
-     * We parse the payload, persist the message locally, and show a notification if appropriate.
+     * We handle two types:
+     *   1. "new_message" (default) — a new chat message from another user
+     *   2. "receipt_update" — a delivery/read receipt sent when the sender is offline
+     *
+     * For new messages we persist locally and send a delivery ack via HTTP.
+     * For receipt updates we update the local message status.
      */
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
@@ -60,6 +65,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        val app = application as? WhisprTextApp ?: return
+        val repo = app.chatRepository
+
+        // Check if this is a receipt update push (sent when sender is offline)
+        val pushType = data["type"]
+        if ("receipt_update" == pushType) {
+            handleReceiptUpdatePush(data, app)
+            return
+        }
+
+        // Otherwise it's a new message push
         val messageId = data["message_id"] ?: return
         val conversationId = data["conversation_id"] ?: return
         val senderId = data["sender_id"] ?: return
@@ -67,9 +83,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val createdAt = data["created_at"] ?: ""
 
         Log.d(TAG, "FCM data push: message=$messageId conversation=$conversationId")
-
-        val app = application as? WhisprTextApp ?: return
-        val repo = app.chatRepository
 
         scope.launch {
             // Parse timestamp
@@ -128,10 +141,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     repo.syncConversations()
                 }
 
-                // Show a local notification if the app is backgrounded or not viewing this chat
+                // Send delivery receipt back to server via HTTP (WebSocket may be disconnected)
                 val isViewingThisChat = repo.isAppInForeground &&
                         repo.activeConversationId == conversationId
+                val receiptStatus = if (isViewingThisChat) "read" else "delivered"
 
+                try {
+                    val success = app.apiClient.sendReceipt(messageId, receiptStatus)
+                    if (success) {
+                        Log.d(TAG, "Receipt sent for message $messageId: $receiptStatus")
+                    } else {
+                        Log.w(TAG, "Receipt request returned non-success for $messageId")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send receipt for message $messageId", e)
+                }
+
+                // Show a local notification if the app is backgrounded or not viewing this chat
                 if (!isViewingThisChat) {
                     db.conversationDao().incrementUnreadCount(conversationId)
                     val senderName = conv?.title ?: conv?.username ?: "New message"
@@ -143,6 +169,36 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to persist FCM message: $messageId", e)
+            }
+        }
+    }
+
+    /**
+     * Handles a receipt_update push notification.
+     * Updates the local message status when the sender notifies us of delivery/read.
+     */
+    private fun handleReceiptUpdatePush(data: Map<String, String>, app: WhisprTextApp) {
+        val messageId = data["message_id"] ?: return
+        val status = data["status"] ?: return
+
+        Log.d(TAG, "Receipt update push: message=$messageId status=$status")
+
+        scope.launch {
+            try {
+                val db = app.database
+                val existing = db.messageDao().getById(messageId)
+                if (existing != null) {
+                    // Use monotonic status update (only upgrade, never downgrade)
+                    val precedence = mapOf("pending" to 0, "sent" to 1, "delivered" to 2, "read" to 3)
+                    val currentPrio = precedence[existing.syncStatus] ?: -1
+                    val newPrio = precedence[status] ?: -1
+                    if (newPrio > currentPrio) {
+                        db.messageDao().insert(existing.copy(syncStatus = status))
+                        Log.d(TAG, "Receipt update applied: $messageId -> $status")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to process receipt update push: $messageId", e)
             }
         }
     }

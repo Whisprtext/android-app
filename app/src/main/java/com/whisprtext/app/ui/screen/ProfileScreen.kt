@@ -1,8 +1,11 @@
 package com.whisprtext.app.ui.screen
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,6 +28,7 @@ fun ProfileScreen(
     onBackClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
     onPrivacyClick: () -> Unit = {},
+    onAppearanceClick: () -> Unit = {},
     isOwnProfile: Boolean = true
 ) {
     val userProfile by viewModel.userProfile.collectAsState()
@@ -67,23 +71,36 @@ fun ProfileScreen(
         }
     }
 
+    val isDark = isSystemInDarkTheme()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Profile") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (isOwnProfile) {
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                shadowElevation = 4.dp,
+                color = MaterialTheme.colorScheme.surface,
+                border = if (isDark) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
+            ) {
+                TopAppBar(
+                    title = { Text("Profile") },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
-                    }
-                }
-            )
+                    },
+                    actions = {
+                        if (isOwnProfile) {
+                            IconButton(onClick = onSettingsClick) {
+                                Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
@@ -276,6 +293,27 @@ fun ProfileScreen(
                             Column {
                                 Text("Who can see my phone number", style = MaterialTheme.typography.bodyLarge)
                                 Text("Manage discoverability and visibility", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Spacer(Modifier.weight(1f))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null)
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAppearanceClick() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text("Appearance", style = MaterialTheme.typography.bodyLarge)
+                                Text("Chat background, colors and doodles", style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.weight(1f))
                             Icon(Icons.Default.ChevronRight, contentDescription = null)

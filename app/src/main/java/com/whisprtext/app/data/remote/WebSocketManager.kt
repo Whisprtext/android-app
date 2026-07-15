@@ -1,5 +1,6 @@
 package com.whisprtext.app.data.remote
 
+import android.util.Log
 import com.google.gson.Gson
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.remote.model.MessageDto
@@ -31,10 +32,14 @@ class WebSocketManager(
     private val client: OkHttpClient = OkHttpClient.Builder().pingInterval(30, TimeUnit.SECONDS).build(),
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) {
+    companion object {
+        private const val TAG = "WSManager"
+    }
     private var webSocket: WebSocket? = null
     private val scope = CoroutineScope(ioDispatcher)
     private var isConnected = false
     private var reconnectAttempt = 0
+    private var contextRef: android.content.Context? = null
 
     private val _events = MutableSharedFlow<WebSocketEvent>(extraBufferCapacity = 100)
     val events: SharedFlow<WebSocketEvent> = _events
@@ -51,6 +56,26 @@ class WebSocketManager(
         }
     }
 
+    fun attachContext(context: android.content.Context) {
+        contextRef = context
+    }
+
+    private fun startForegroundService() {
+        try {
+            contextRef?.let { WebSocketForegroundService.start(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start foreground service", e)
+        }
+    }
+
+    private fun stopForegroundService() {
+        try {
+            contextRef?.let { WebSocketForegroundService.stop(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to stop foreground service", e)
+        }
+    }
+
     @Synchronized
     private fun connect(token: String) {
         if (isConnected) return
@@ -62,6 +87,7 @@ class WebSocketManager(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnected = true
                 reconnectAttempt = 0
+                startForegroundService()
                 scope.launch { _events.emit(WebSocketEvent.Connected) }
             }
 
@@ -122,6 +148,7 @@ class WebSocketManager(
 
     private fun handleDisconnect() {
         isConnected = false
+        stopForegroundService()
         scope.launch {
             _events.emit(WebSocketEvent.Disconnected)
             delay(getBackoffDelay())
@@ -133,8 +160,25 @@ class WebSocketManager(
 
     private fun getBackoffDelay(): Long {
         reconnectAttempt++
-        val delay = reconnectAttempt * 2000L
-        return delay.coerceAtMost(30000L)
+        val delay = (reconnectAttempt * 2000L).coerceAtMost(30000L)
+        return delay
+    }
+
+    /**
+     * Forces an immediate reconnection attempt, resetting the backoff counter.
+     * Called when the app returns to foreground.
+     */
+    @Synchronized
+    fun forceReconnect() {
+        reconnectAttempt = 0
+        webSocket?.close(1000, "Forcing reconnect")
+        webSocket = null
+        isConnected = false
+        scope.launch {
+            preferencesManager.sessionToken.firstOrNull()?.let { token ->
+                connect(token)
+            }
+        }
     }
 
     @Synchronized
@@ -143,6 +187,7 @@ class WebSocketManager(
         webSocket = null
         isConnected = false
         reconnectAttempt = 0
+        stopForegroundService()
     }
 
     fun markMessageDelivered(msgId: String) {

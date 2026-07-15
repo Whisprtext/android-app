@@ -44,7 +44,9 @@ class WhisprTextApp : Application() {
         val gson = com.google.gson.GsonBuilder()
             .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .create()
-        webSocketManager = WebSocketManager(wsUrl, preferencesManager, gson)
+        webSocketManager = WebSocketManager(wsUrl, preferencesManager, gson).also {
+            it.attachContext(applicationContext)
+        }
         networkMonitor = NetworkMonitor(applicationContext)
         notificationHelper = NotificationHelper(applicationContext)
         

@@ -235,6 +235,16 @@ class ApiClient(
         }
     }
 
+    suspend fun sendReceipt(messageId: String, status: String): Boolean {
+        val json = gson.toJson(mapOf("status" to status))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/messages/$messageId/receipts")
+            .post(body)
+            .build()
+        return executeStatusRequest(request)
+    }
+
     suspend fun deleteMessageForEveryone(messageId: String): Boolean {
         val request = Request.Builder()
             .url("$baseUrl/messages/$messageId")

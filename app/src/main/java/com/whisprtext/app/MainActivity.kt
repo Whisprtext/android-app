@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.lifecycle.ViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -29,12 +31,14 @@ import com.whisprtext.app.ui.screen.ConversationListScreen
 import com.whisprtext.app.ui.screen.SettingsScreen
 import com.whisprtext.app.ui.screen.ProfileScreen
 import com.whisprtext.app.ui.screen.PrivacyScreen
+import com.whisprtext.app.ui.screen.AppearanceScreen
 import com.whisprtext.app.ui.theme.WhisrtextTheme
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 import com.whisprtext.app.ui.viewmodel.SettingsViewModel
 import com.whisprtext.app.ui.viewmodel.ProfileViewModel
+import com.whisprtext.app.ui.viewmodel.AppearanceViewModel
 
 import android.content.Intent
 import android.os.Build
@@ -64,6 +68,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Force WebSocket reconnect when returning to foreground
+        app?.webSocketManager?.forceReconnect()
     }
 
     override fun onStop() {
@@ -209,7 +215,13 @@ class MainActivity : ComponentActivity() {
                                         nullable = true
                                         defaultValue = null
                                     }
-                                )
+                                ),
+                                enterTransition = {
+                                    slideInVertically(initialOffsetY = { -it }) + fadeIn()
+                                },
+                                popExitTransition = {
+                                    slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+                                }
                             ) { backStackEntry ->
                                 val username = backStackEntry.arguments?.getString("username")
                                 val profileViewModel = viewModelFactory {
@@ -226,6 +238,9 @@ class MainActivity : ComponentActivity() {
                                     onPrivacyClick = {
                                         navController.navigate(Screen.Privacy.route)
                                     },
+                                    onAppearanceClick = {
+                                        navController.navigate(Screen.Appearance.route)
+                                    },
                                     isOwnProfile = username == null
                                 )
                             }
@@ -236,6 +251,18 @@ class MainActivity : ComponentActivity() {
                                 }
                                 PrivacyScreen(
                                     viewModel = profileViewModel,
+                                    onBackClick = {
+                                        navController.popBackStack()
+                                    }
+                                )
+                            }
+
+                            composable(Screen.Appearance.route) {
+                                val appearanceViewModel = viewModelFactory {
+                                    AppearanceViewModel(preferencesManager)
+                                }
+                                AppearanceScreen(
+                                    viewModel = appearanceViewModel,
                                     onBackClick = {
                                         navController.popBackStack()
                                     }

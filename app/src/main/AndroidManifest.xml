@@ -45,6 +45,11 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".data.remote.WebSocketForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
     </application>
 
 </manifest>

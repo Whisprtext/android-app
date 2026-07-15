@@ -107,6 +107,12 @@ class ChatRepository @JvmOverloads constructor(
                         is WebSocketEvent.MessageDeleted -> {
                             messageDao.deleteById(event.messageId)
                         }
+                        is WebSocketEvent.Connected -> {
+                            // On WebSocket reconnect, do a delta sync to catch up
+                            // on messages and receipts missed while offline
+                            syncDelta()
+                            retryFailedMessages()
+                        }
                         else -> {}
                     }
                 }

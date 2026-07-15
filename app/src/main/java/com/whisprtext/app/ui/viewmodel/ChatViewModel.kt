@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.MessageEntity
+import com.whisprtext.app.data.model.AppearanceSettings
 import com.whisprtext.app.data.repository.ChatRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -15,7 +16,8 @@ data class ChatUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val conversation: ConversationEntity? = null,
-    val otherUser: UserDto? = null
+    val otherUser: UserDto? = null,
+    val appearanceSettings: AppearanceSettings = AppearanceSettings()
 )
  
 class ChatViewModel(
@@ -33,14 +35,23 @@ class ChatViewModel(
         chatRepository.getConversationFlow(conversationId),
         _otherUser,
         _isLoading,
-        _error
-    ) { messages, conversation, otherUser, isLoading, error ->
+        _error,
+        preferencesManager.appearanceSettings
+    ) { flowResults ->
+        val messages = flowResults[0] as List<MessageEntity>
+        val conversation = flowResults[1] as? ConversationEntity
+        val otherUser = flowResults[2] as? UserDto
+        val isLoading = flowResults[3] as Boolean
+        val error = flowResults[4] as? String
+        val appearance = flowResults[5] as AppearanceSettings
+
         ChatUiState(
             messages = messages,
             isLoading = isLoading,
             error = error,
             conversation = conversation,
-            otherUser = otherUser
+            otherUser = otherUser,
+            appearanceSettings = appearance
         )
     }.stateIn(
         scope = viewModelScope,

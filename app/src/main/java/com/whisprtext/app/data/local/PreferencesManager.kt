@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.gson.Gson
+import com.whisprtext.app.data.model.AppearanceSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -22,6 +24,28 @@ class PreferencesManager(private val context: Context) {
         private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
         private val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
         private val KEY_PUSH_TOKEN = stringPreferencesKey("push_token")
+        private val KEY_APPEARANCE_SETTINGS = stringPreferencesKey("appearance_settings")
+    }
+
+    private val gson = Gson()
+
+    val appearanceSettings: Flow<AppearanceSettings> = context.dataStore.data.map { preferences ->
+        val json = preferences[KEY_APPEARANCE_SETTINGS]
+        if (json != null) {
+            try {
+                gson.fromJson(json, AppearanceSettings::class.java)
+            } catch (e: Exception) {
+                AppearanceSettings()
+            }
+        } else {
+            AppearanceSettings()
+        }
+    }
+
+    suspend fun saveAppearanceSettings(settings: AppearanceSettings) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_APPEARANCE_SETTINGS] = gson.toJson(settings)
+        }
     }
 
     val sessionToken: Flow<String?> = context.dataStore.data.map { preferences ->
