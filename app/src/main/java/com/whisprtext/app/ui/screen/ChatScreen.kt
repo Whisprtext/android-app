@@ -45,7 +45,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.text.BasicTextField
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.component.DoodleBackground
 import com.whisprtext.app.ui.theme.AppearancePresets
@@ -725,50 +727,68 @@ fun ChatScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.Bottom
                         ) {
-                            OutlinedTextField(
-                                value = textMessage,
-                                onValueChange = { onTextMessageChange(it) },
-                                placeholder = { Text("Enter message...", fontSize = 14.sp) },
+                            Surface(
                                 modifier = Modifier.weight(1f),
-                                singleLine = false,
-                                maxLines = 5,
                                 shape = RoundedCornerShape(24.dp),
-                                visualTransformation = markdownTransformation,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                ),
-                                leadingIcon = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(start = 4.dp)
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { /* Emoji */ },
+                                        modifier = Modifier.size(32.dp).align(Alignment.CenterVertically)
                                     ) {
-                                        IconButton(
-                                            onClick = { /* Emoji */ },
-                                            modifier = Modifier.size(36.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.SentimentSatisfiedAlt,
-                                                contentDescription = "Emoji",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        IconButton(
-                                            onClick = { /* Media */ },
-                                            modifier = Modifier.size(36.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.AddPhotoAlternate,
-                                                contentDescription = "Media",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.SentimentSatisfiedAlt,
+                                            contentDescription = "Emoji",
+                                            modifier = Modifier.size(22.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                },
-                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { /* Media */ },
+                                        modifier = Modifier.size(32.dp).align(Alignment.CenterVertically)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AddPhotoAlternate,
+                                            contentDescription = "Media",
+                                            modifier = Modifier.size(22.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                            .align(Alignment.CenterVertically)
+                                    ) {
+                                        if (textMessage.text.isEmpty()) {
+                                            Text(
+                                                "Enter message...",
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        BasicTextField(
+                                            value = textMessage,
+                                            onValueChange = { onTextMessageChange(it) },
+                                            textStyle = LocalTextStyle.current.copy(
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontSize = 15.sp
+                                            ),
+                                            visualTransformation = markdownTransformation,
+                                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+
                                     val isSendMode = textMessage.text.isNotBlank()
                                     AnimatedContent(
                                         targetState = isSendMode,
@@ -777,7 +797,8 @@ fun ChatScreen(
                                              scaleIn(initialScale = 0.8f, animationSpec = tween(220, delayMillis = 90)))
                                             .togetherWith(fadeOut(animationSpec = tween(90)) + scaleOut(targetScale = 0.8f, animationSpec = tween(90)))
                                         },
-                                        label = "SendMicAnimation"
+                                        label = "SendMicAnimation",
+                                        modifier = Modifier.align(Alignment.CenterVertically)
                                     ) { targetIsSendMode ->
                                         if (targetIsSendMode) {
                                             IconButton(
@@ -787,27 +808,27 @@ fun ChatScreen(
                                                         textMessage = TextFieldValue("")
                                                     }
                                                 },
-                                                modifier = Modifier.padding(end = 4.dp).size(36.dp),
+                                                modifier = Modifier.size(32.dp),
                                                 colors = IconButtonDefaults.iconButtonColors(
                                                     contentColor = MaterialTheme.colorScheme.primary
                                                 )
                                             ) {
-                                                Icon(Icons.Default.Send, contentDescription = "Send")
+                                                Icon(Icons.Default.Send, contentDescription = "Send", modifier = Modifier.size(22.dp))
                                             }
                                         } else {
                                             IconButton(
                                                 onClick = { /* Record Voice */ },
-                                                modifier = Modifier.padding(end = 4.dp).size(36.dp),
+                                                modifier = Modifier.size(32.dp),
                                                 colors = IconButtonDefaults.iconButtonColors(
                                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             ) {
-                                                Icon(Icons.Default.Mic, contentDescription = "Voice")
+                                                Icon(Icons.Default.Mic, contentDescription = "Voice", modifier = Modifier.size(22.dp))
                                             }
                                         }
                                     }
                                 }
-                            )
+                            }
                         }
                     }
                 }
