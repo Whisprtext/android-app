@@ -24,15 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TransformedText
@@ -49,7 +44,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.text.BasicTextField
 import com.whisprtext.app.data.local.entity.MessageEntity
+import com.whisprtext.app.ui.component.ChatBubble
 import com.whisprtext.app.ui.component.DoodleBackground
+import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.ChatTheme
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
@@ -871,7 +868,6 @@ fun ChatScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: MessageEntity,
@@ -882,135 +878,25 @@ fun MessageBubble(
     isDark: Boolean,
     onLongClick: () -> Unit
 ) {
-    val bubbleColor = remember(isSelf, isDark, theme) {
-        if (isSelf) {
-            if (isDark) theme.selfBubbleColorDark else theme.selfBubbleColorLight
-        } else {
-            if (isDark) theme.otherBubbleColorDark else theme.otherBubbleColorLight
-        }
-    }
-    val textColor = if (isDark) Color.White else Color.Black
-    val alignment = if (isSelf) Alignment.End else Alignment.Start
-
-    val bubbleShape = remember(isSelf, isGroupHeader, isGroupFooter) {
-        RoundedCornerShape(
-            topStart = if (!isSelf) 0.dp else (if (isGroupHeader) 12.dp else 4.dp),
-            topEnd = if (isSelf) 0.dp else (if (isGroupHeader) 12.dp else 4.dp),
-            bottomStart = if (!isSelf) 0.dp else (if (isGroupFooter) 12.dp else 4.dp),
-            bottomEnd = if (isSelf) 0.dp else (if (isGroupFooter) 12.dp else 4.dp)
-        )
-    }
-
     val parsedContent = remember(message.encryptedContent) {
         MarkdownParser.parse(message.encryptedContent, hideMarkers = true)
     }
 
-    val textMeasurer = rememberTextMeasurer()
-    val textStyle = remember(textColor) {
-        TextStyle(
-            color = textColor,
-            fontSize = 16.sp
-        )
+    val timeStr = remember(message.createdAt) {
+        val timeInstant = java.time.Instant.ofEpochMilli(message.createdAt)
+        java.time.LocalDateTime.ofInstant(timeInstant, java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
     }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = alignment
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .graphicsLayer {
-                    shape = bubbleShape
-                    clip = true
-                }
-                .background(bubbleColor)
-                .combinedClickable(
-                    onLongClick = onLongClick,
-                    onClick = {}
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Layout(
-                content = {
-                    androidx.compose.foundation.text.BasicText(
-                        text = parsedContent,
-                        style = textStyle
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        val timeStr = remember(message.createdAt) {
-                            val timeInstant = java.time.Instant.ofEpochMilli(message.createdAt)
-                            java.time.LocalDateTime.ofInstant(timeInstant, java.time.ZoneId.systemDefault())
-                                .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
-                        }
-                        Text(
-                            text = timeStr,
-                            fontSize = 10.sp,
-                            color = textColor.copy(alpha = 0.6f)
-                        )
-                        if (isSelf) {
-                            val statusText = remember(message.syncStatus) {
-                                when (message.syncStatus) {
-                                    "pending" -> "🕒"
-                                    "failed" -> "✕"
-                                    "sent" -> "✓"
-                                    "delivered" -> "✓✓"
-                                    "read" -> "✓✓✓"
-                                    else -> "✓"
-                                }
-                            }
-                            val statusColor = remember(message.syncStatus, textColor) {
-                                when (message.syncStatus) {
-                                    "failed" -> androidx.compose.ui.graphics.Color.Red
-                                    "read" -> androidx.compose.ui.graphics.Color(0xFF34B7F1)
-                                    else -> textColor.copy(alpha = 0.6f)
-                                }
-                            }
-                            Text(
-                                text = statusText,
-                                fontSize = 11.sp,
-                                color = statusColor
-                            )
-                        }
-                    }
-                }
-            ) { measurables, constraints ->
-                val textLayoutResult = textMeasurer.measure(
-                    text = parsedContent,
-                    style = textStyle,
-                    constraints = constraints
-                )
-                
-                val textPlaceable = measurables[0].measure(constraints)
-                val timePlaceable = measurables[1].measure(constraints.copy(minWidth = 0))
-
-                val parentWidth = constraints.maxWidth
-
-                val lineCount = textLayoutResult.lineCount
-                val lastLineRight = if (lineCount > 0) textLayoutResult.getLineRight(lineCount - 1) else 0f
-                val lastLineLeft = if (lineCount > 0) textLayoutResult.getLineLeft(lineCount - 1) else 0f
-                val lastLineWidth = lastLineRight - lastLineLeft
-
-                val spacingPx = (8 * density).toInt()
-                val fitsOnLastLine = lineCount > 0 && (lastLineWidth + spacingPx + timePlaceable.width <= parentWidth)
-
-                val layoutHeight = if (fitsOnLastLine) {
-                    maxOf(textPlaceable.height, timePlaceable.height)
-                } else {
-                    textPlaceable.height + timePlaceable.height
-                }
-
-                layout(parentWidth, layoutHeight) {
-                    textPlaceable.placeRelative(0, 0)
-                    timePlaceable.placeRelative(
-                        x = parentWidth - timePlaceable.width,
-                        y = layoutHeight - timePlaceable.height
-                    )
-                }
-            }
-        }
-    }
+    ChatBubble(
+        content = parsedContent,
+        time = timeStr,
+        isSelf = isSelf,
+        isGroupHeader = isGroupHeader,
+        isGroupFooter = isGroupFooter,
+        theme = theme,
+        isDark = isDark,
+        syncStatus = message.syncStatus,
+        onLongClick = onLongClick
+    )
 }

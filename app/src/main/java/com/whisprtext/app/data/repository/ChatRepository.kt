@@ -5,6 +5,7 @@ import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.entity.MessageEntity
+import com.whisprtext.app.data.local.entity.PendingReceiptEntity
 import com.whisprtext.app.data.remote.ApiClient
 import com.whisprtext.app.data.remote.WebSocketEvent
 import com.whisprtext.app.data.remote.WebSocketManager
@@ -31,10 +32,20 @@ class ChatRepository @JvmOverloads constructor(
 ) {
     private val conversationDao = database.conversationDao()
     private val messageDao = database.messageDao()
+    private val pendingReceiptDao = database.pendingReceiptDao()
     private val scope = CoroutineScope(ioDispatcher)
     private var cachedUserId: String? = null
+
+    /**
+     * In-memory map for the edge case where a receipt update (from the server) arrives
+     * *before* the corresponding message has been written to Room. The receipt is held
+     * here and applied when the message is eventually inserted by upsertMessage().
+     */
     private val pendingReceipts = ConcurrentHashMap<String, String>()
     private val notificationHelper = context?.let { NotificationHelper(it) }
+
+    /** Maximum number of HTTP delivery attempts before a pending receipt is abandoned. */
+    private val MAX_RECEIPT_ATTEMPTS = 10
 
     var activeConversationId: String? = null
     var isAppInForeground = false
@@ -57,22 +68,34 @@ class ChatRepository @JvmOverloads constructor(
                     val currentUserId = cachedUserId ?: preferencesManager?.userId?.first() ?: ""
                     when (event) {
                         is WebSocketEvent.NewMessage -> {
+                            val isCurrentChat = isAppInForeground &&
+                                    activeConversationId == event.message.conversationId
+
                             if (event.message.senderId != currentUserId) {
-                                webSocketManager?.markMessageDelivered(event.message.id)
+                                // Reliably report delivery/read status via HTTP, not just WS.
+                                // WS call is still fired for real-time feedback but is not required.
+                                val receiptStatus = if (isCurrentChat) "read" else "delivered"
+                                sendReceiptReliably(
+                                    messageId = event.message.id,
+                                    conversationId = event.message.conversationId,
+                                    status = receiptStatus,
+                                )
+                                // Best-effort real-time WS notification (non-blocking).
+                                if (isCurrentChat) {
+                                    webSocketManager?.markMessageRead(event.message.id)
+                                } else {
+                                    webSocketManager?.markMessageDelivered(event.message.id)
+                                }
                             }
 
-                            val isCurrentChat = isAppInForeground && activeConversationId == event.message.conversationId
-                            val entityStatus = if (event.message.senderId == currentUserId) {
-                                "sent"
-                            } else if (isCurrentChat) {
-                                webSocketManager?.markMessageRead(event.message.id)
-                                "read"
-                            } else {
-                                "delivered"
+                            val entityStatus = when {
+                                event.message.senderId == currentUserId -> "sent"
+                                isCurrentChat -> "read"
+                                else -> "delivered"
                             }
 
                             upsertMessage(event.message.toEntity(entityStatus))
-                            
+
                             val conv = conversationDao.getById(event.message.conversationId)
                             if (conv != null) {
                                 val updatedConv = conv.copy(
@@ -100,6 +123,8 @@ class ChatRepository @JvmOverloads constructor(
                             messageDao.deleteById(event.clientMsgId)
                         }
                         is WebSocketEvent.ReceiptUpdate -> {
+                            // Only apply receipts that are not from the current user —
+                            // receipts from self are managed locally.
                             if (event.receipt.userId != currentUserId) {
                                 updateMessageStatus(event.receipt.messageId, event.receipt.status)
                             }
@@ -108,8 +133,9 @@ class ChatRepository @JvmOverloads constructor(
                             messageDao.deleteById(event.messageId)
                         }
                         is WebSocketEvent.Connected -> {
-                            // On WebSocket reconnect, do a delta sync to catch up
-                            // on messages and receipts missed while offline
+                            // On WebSocket reconnect, flush pending receipts first, then
+                            // do a delta sync to catch up on messages missed while offline.
+                            syncReceipts()
                             syncDelta()
                             retryFailedMessages()
                         }
@@ -128,10 +154,14 @@ class ChatRepository @JvmOverloads constructor(
                 networkMonitor?.isOnline?.collect { isOnline ->
                     if (isOnline) {
                         if (wasOffline) {
+                            // Coming back online: flush pending receipts before delta sync
+                            // so the server gets accurate delivery information.
+                            syncReceipts()
                             syncDelta()
                             retryFailedMessages()
                         } else {
                             // Resync when initialized while online
+                            syncReceipts()
                             syncDelta()
                             retryFailedMessages()
                         }
@@ -227,9 +257,15 @@ class ChatRepository @JvmOverloads constructor(
                 }
                 upsertMessages(entities)
 
+                // For received messages, reliably report delivery via HTTP so the sender
+                // sees double-tick even if the WS was unavailable when the message arrived.
                 for (msg in delta.messages) {
                     if (msg.senderId != currentUserId) {
-                        webSocketManager.markMessageDelivered(msg.id)
+                        sendReceiptReliably(
+                            messageId = msg.id,
+                            conversationId = msg.conversationId,
+                            status = "delivered",
+                        )
                     }
                 }
 
@@ -267,6 +303,82 @@ class ChatRepository @JvmOverloads constructor(
             preferencesManager.saveLastSyncTime(delta.currentTime)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * Flush all pending receipts from the Room queue to the backend.
+     *
+     * Called on:
+     * - WebSocket connect / reconnect
+     * - Network becomes available
+     * - App comes to foreground (via onStart in MainActivity)
+     *
+     * Receipts that fail transiently have their attempt counter incremented.
+     * Receipts that exceed [MAX_RECEIPT_ATTEMPTS] are abandoned to prevent
+     * stale entries from accumulating indefinitely.
+     */
+    suspend fun syncReceipts() {
+        try {
+            // First, purge entries that have been retried too many times.
+            pendingReceiptDao.deleteExhausted(MAX_RECEIPT_ATTEMPTS)
+
+            val pending = pendingReceiptDao.getAll()
+            for (entry in pending) {
+                try {
+                    val success = apiClient.sendReceipt(entry.messageId, entry.status)
+                    if (success) {
+                        pendingReceiptDao.deleteById(entry.id)
+                        // Also make sure the local message reflects the correct status.
+                        updateMessageStatus(entry.messageId, entry.status)
+                    } else {
+                        pendingReceiptDao.incrementAttempts(entry.id)
+                    }
+                } catch (e: Exception) {
+                    pendingReceiptDao.incrementAttempts(entry.id)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Enqueue a receipt to the Room-backed pending queue and attempt to deliver it
+     * immediately via HTTP. If the HTTP call fails (offline, server error), the entry
+     * stays in Room and will be retried by [syncReceipts] on the next opportunity.
+     *
+     * If [status] == "read" we remove any previously queued "delivered" receipt for the
+     * same message because "read" subsumes "delivered".
+     *
+     * This function is intentionally **not** a suspend function at the call sites
+     * inside WebSocket event handlers — callers launch it in [scope].
+     */
+    suspend fun sendReceiptReliably(messageId: String, conversationId: String, status: String) {
+        try {
+            // "read" supersedes "delivered" — remove stale lower-priority entries.
+            if (status == "read") {
+                pendingReceiptDao.deleteByMessageId(messageId)
+            }
+
+            val entry = PendingReceiptEntity(
+                id = UUID.randomUUID().toString(),
+                messageId = messageId,
+                conversationId = conversationId,
+                status = status,
+            )
+            pendingReceiptDao.insert(entry)
+
+            // Attempt immediate HTTP delivery.
+            val success = apiClient.sendReceipt(messageId, status)
+            if (success) {
+                pendingReceiptDao.deleteById(entry.id)
+                updateMessageStatus(messageId, status)
+            } else {
+                pendingReceiptDao.incrementAttempts(entry.id)
+            }
+        } catch (e: Exception) {
+            // Network unavailable or server error — entry stays in DB for retry.
         }
     }
 
@@ -311,6 +423,8 @@ class ChatRepository @JvmOverloads constructor(
     private suspend fun updateMessageStatus(messageId: String, newStatus: String) {
         val existing = messageDao.getById(messageId)
         if (existing == null) {
+            // Message not yet in DB — hold receipt in the in-memory map so it can be
+            // applied the next time upsertMessage() is called for this message.
             pendingReceipts[messageId] = newStatus
             return
         }
@@ -342,10 +456,27 @@ class ChatRepository @JvmOverloads constructor(
 
     suspend fun markConversationAsRead(conversationId: String) {
         val currentUserId = preferencesManager.userId.first() ?: return
-        webSocketManager.markConversationRead(conversationId)
+
+        // Mark all received messages in the conversation as read locally.
         messageDao.markConversationMessagesRead(conversationId, currentUserId)
         conversationDao.clearUnreadCount(conversationId)
         notificationHelper?.cancelNotification(conversationId)
+
+        // Best-effort real-time WS signal (fires immediately, even if it fails the
+        // HTTP path below will still report accurate receipt status).
+        webSocketManager.markConversationRead(conversationId)
+
+        // Queue reliable HTTP receipts for each unread received message.
+        // This ensures the sender sees double-tick even if WS is unavailable.
+        try {
+            val unread = messageDao.getUnreadReceivedMessages(currentUserId)
+                .filter { it.conversationId == conversationId }
+            for (msg in unread) {
+                sendReceiptReliably(msg.id, conversationId, "read")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     suspend fun createConversation(type: String, members: List<String>): ConversationEntity {

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import com.whisprtext.app.data.local.entity.ConversationEntity
+import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 import com.whisprtext.app.util.ContactHelper
 
@@ -171,49 +172,6 @@ fun ConversationListScreen(
                     Text(uiState.error ?: "")
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun InitialsAvatar(
-    id: String,
-    modifier: Modifier = Modifier,
-    avatarUrl: String? = null,
-    fontSize: TextUnit = 16.sp
-) {
-    val initials = id.take(1).uppercase()
-    val colors = listOf(
-        Color(0xFFE57373), Color(0xFFF06292), Color(0xFFBA68C8), Color(0xFF9575CD),
-        Color(0xFF7986CB), Color(0xFF64B5F6), Color(0xFF4FC3F7), Color(0xFF4DB6AC),
-        Color(0xFF81C784), Color(0xFFAED581), Color(0xFFFFB74D), Color(0xFFFF8A65)
-    )
-    val colorIndex = Math.abs(id.hashCode()) % colors.size
-    val backgroundColor = colors[colorIndex]
-
-    var isError by remember(avatarUrl) { mutableStateOf(false) }
-
-    Box(
-        modifier = modifier
-            .background(backgroundColor, shape = CircleShape)
-            .clip(CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        // Show initials as a fallback/placeholder
-        Text(
-            text = initials,
-            color = Color.White,
-            fontSize = fontSize
-        )
-
-        if (!avatarUrl.isNullOrBlank() && !isError) {
-            AsyncImage(
-                model = avatarUrl,
-                contentDescription = id,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                onError = { isError = true }
-            )
         }
     }
 }

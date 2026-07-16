@@ -48,6 +48,8 @@ class OneToOneConversationSyncTest {
         messageDao = db.messageDao()
         whenever(networkMonitor.isOnline).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(true))
         whenever(webSocketManager.events).thenReturn(kotlinx.coroutines.flow.MutableSharedFlow())
+        whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-current"))
+        whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
         repository = ChatRepository(db, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
 

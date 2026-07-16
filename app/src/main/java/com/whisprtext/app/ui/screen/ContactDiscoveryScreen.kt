@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.whisprtext.app.data.remote.model.UserDto
+import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.viewmodel.ContactDiscoveryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)

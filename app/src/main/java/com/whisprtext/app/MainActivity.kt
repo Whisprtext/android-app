@@ -4,9 +4,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -16,8 +24,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import kotlinx.coroutines.delay
 import androidx.lifecycle.ViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -68,6 +85,12 @@ class MainActivity : ComponentActivity() {
                     repo.markConversationAsRead(activeId)
                 }
             }
+            // Flush any pending receipts accumulated while the app was in the background
+            // and pull any missed messages / receipt updates from the server.
+            lifecycleScope.launch {
+                repo.syncReceipts()
+                repo.syncDelta()
+            }
         }
         // Force WebSocket reconnect when returning to foreground
         app?.webSocketManager?.forceReconnect()
@@ -106,8 +129,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             WhisrtextTheme {
+                var showSplash by remember { mutableStateOf(true) }
                 var isSessionLoaded by remember { mutableStateOf(false) }
                 var sessionToken by remember { mutableStateOf<String?>(null) }
+
+                LaunchedEffect(Unit) {
+                    delay(2000)
+                    showSplash = false
+                }
 
                 LaunchedEffect(preferencesManager) {
                     Log.d("MainActivity", "LaunchedEffect: starting preference observation")
@@ -130,14 +159,30 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Log.d("MainActivity", "Recomposing: isSessionLoaded=$isSessionLoaded, sessionToken='$sessionToken'")
+                Log.d("MainActivity", "Recomposing: showSplash=$showSplash, isSessionLoaded=$isSessionLoaded, sessionToken='$sessionToken'")
 
-                if (!isSessionLoaded) {
+                if (showSplash || !isSessionLoaded) {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        Box(
+                            modifier = Modifier
+                                .size(180.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(R.mipmap.ic_launcher_foreground)
+                                    .build(),
+                                contentDescription = "WhisprText Logo",
+                                modifier = Modifier.size(120.dp)
+                            )
+                        }
                     }
                 } else {
                     if (sessionToken == null) {

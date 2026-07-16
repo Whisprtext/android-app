@@ -37,9 +37,12 @@ class WebSocketManager(
     }
     private var webSocket: WebSocket? = null
     private val scope = CoroutineScope(ioDispatcher)
-    private var isConnected = false
+    /** True when the WebSocket connection is established and the server has confirmed open. */
+    @Volatile var isConnected = false
+        private set
     private var reconnectAttempt = 0
     private var contextRef: android.content.Context? = null
+
 
     private val _events = MutableSharedFlow<WebSocketEvent>(extraBufferCapacity = 100)
     val events: SharedFlow<WebSocketEvent> = _events
@@ -91,7 +94,7 @@ class WebSocketManager(
                 scope.launch { _events.emit(WebSocketEvent.Connected) }
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
+            override fun onMessage(ws: WebSocket, text: String) {
                 try {
                     val wrapper = gson.fromJson(text, WsOutgoingEvent::class.java)
                     val event = when (wrapper.event) {
@@ -132,16 +135,20 @@ class WebSocketManager(
                 }
             }
 
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                webSocket.close(1000, null)
+            override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+                ws.close(1000, null)
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                handleDisconnect()
+            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                if (webSocket === ws) {
+                    handleDisconnect()
+                }
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                handleDisconnect()
+            override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                if (webSocket === ws) {
+                    handleDisconnect()
+                }
             }
         })
     }

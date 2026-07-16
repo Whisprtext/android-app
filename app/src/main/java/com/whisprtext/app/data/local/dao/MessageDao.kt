@@ -35,4 +35,15 @@ interface MessageDao {
 
     @Query("DELETE FROM messages")
     suspend fun deleteAll()
+
+    /**
+     * Returns messages that were received (sender != currentUser) but not yet
+     * marked as 'read' in the local cache. Used on startup to detect receipts
+     * we may have failed to send during a previous session.
+     */
+    @Query(
+        "SELECT * FROM messages WHERE senderId != :currentUserId AND syncStatus != 'read' ORDER BY createdAt ASC"
+    )
+    suspend fun getUnreadReceivedMessages(currentUserId: String): List<MessageEntity>
 }
+

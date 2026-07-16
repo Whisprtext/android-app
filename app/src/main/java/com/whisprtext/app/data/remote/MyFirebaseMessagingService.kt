@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Handles incoming Firebase Cloud Messaging (FCM) messages.
@@ -84,7 +85,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "FCM data push: message=$messageId conversation=$conversationId")
 
-        scope.launch {
+        // runBlocking ensures all DB writes and HTTP calls complete before Android
+        // reclaims the process. This is critical when the screen is off — the OS will
+        // kill a service process as soon as onMessageReceived() returns if no foreground
+        // work is in flight, so we must not use launch{} here.
+        runBlocking {
             // Parse timestamp
             val createdAtMillis = try {
                 java.time.Instant.parse(createdAt).toEpochMilli()
@@ -102,7 +107,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             // Skip if this message is from ourselves (can happen if multi-device)
             if (senderId == currentUserId) {
                 Log.d(TAG, "Ignoring FCM push for own message: $messageId")
-                return@launch
+                return@runBlocking
             }
 
             // Build and persist the message entity
@@ -141,21 +146,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     repo.syncConversations()
                 }
 
-                // Send delivery receipt back to server via HTTP (WebSocket may be disconnected)
+                // Use sendReceiptReliably so the receipt is queued in Room and retried
+                // if this HTTP call fails (e.g. brief connectivity loss while waking from sleep).
                 val isViewingThisChat = repo.isAppInForeground &&
                         repo.activeConversationId == conversationId
                 val receiptStatus = if (isViewingThisChat) "read" else "delivered"
 
-                try {
-                    val success = app.apiClient.sendReceipt(messageId, receiptStatus)
-                    if (success) {
-                        Log.d(TAG, "Receipt sent for message $messageId: $receiptStatus")
-                    } else {
-                        Log.w(TAG, "Receipt request returned non-success for $messageId")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to send receipt for message $messageId", e)
-                }
+                repo.sendReceiptReliably(messageId, conversationId, receiptStatus)
+                Log.d(TAG, "Receipt queued for message $messageId: $receiptStatus")
 
                 // Show a local notification if the app is backgrounded or not viewing this chat
                 if (!isViewingThisChat) {
@@ -176,6 +174,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     /**
      * Handles a receipt_update push notification.
      * Updates the local message status when the sender notifies us of delivery/read.
+     * Uses runBlocking to ensure DB write completes before Android reclaims the process.
      */
     private fun handleReceiptUpdatePush(data: Map<String, String>, app: WhisprTextApp) {
         val messageId = data["message_id"] ?: return
@@ -183,7 +182,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "Receipt update push: message=$messageId status=$status")
 
-        scope.launch {
+        runBlocking {
             try {
                 val db = app.database
                 val existing = db.messageDao().getById(messageId)

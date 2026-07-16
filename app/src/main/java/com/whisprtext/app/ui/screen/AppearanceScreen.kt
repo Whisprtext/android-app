@@ -23,10 +23,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.whisprtext.app.ui.component.ChatBubble
 import com.whisprtext.app.ui.component.DoodleBackground
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.ChatTheme
 import com.whisprtext.app.ui.viewmodel.AppearanceViewModel
+import com.whisprtext.app.util.MarkdownParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,44 +168,24 @@ fun DemoChatView(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Other bubble
-            DemoBubble(
-                text = "Hey! How do you like this theme?",
+            ChatBubble(
+                content = MarkdownParser.parse("Hey! How do you like this theme?", hideMarkers = true),
+                time = "10:00 AM",
                 isSelf = false,
-                color = if (isDark) theme.otherBubbleColorDark else theme.otherBubbleColorLight,
-                textColor = if (isDark) Color.White else Color.Black
+                isGroupHeader = true,
+                isGroupFooter = true,
+                theme = theme,
+                isDark = isDark
             )
-            // Self bubble
-            DemoBubble(
-                text = "It looks amazing! So clean.",
+            ChatBubble(
+                content = MarkdownParser.parse("It looks amazing! So clean.", hideMarkers = true),
+                time = "10:01 AM",
                 isSelf = true,
-                color = if (isDark) theme.selfBubbleColorDark else theme.selfBubbleColorLight,
-                textColor = if (isDark) Color.White else Color.Black
-            )
-        }
-    }
-}
-
-@Composable
-fun DemoBubble(text: String, isSelf: Boolean, color: Color, textColor: Color) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isSelf) Arrangement.End else Arrangement.Start
-    ) {
-        Surface(
-            color = color,
-            shape = RoundedCornerShape(
-                topStart = 12.dp,
-                topEnd = 12.dp,
-                bottomStart = if (isSelf) 12.dp else 2.dp,
-                bottomEnd = if (isSelf) 2.dp else 12.dp
-            )
-        ) {
-            Text(
-                text = text,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                fontSize = 14.sp,
-                color = textColor
+                isGroupHeader = true,
+                isGroupFooter = true,
+                theme = theme,
+                isDark = isDark,
+                syncStatus = "read"
             )
         }
     }

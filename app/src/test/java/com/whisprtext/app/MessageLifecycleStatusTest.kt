@@ -3,6 +3,7 @@ package com.whisprtext.app
 import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.dao.ConversationDao
 import com.whisprtext.app.data.local.dao.MessageDao
+import com.whisprtext.app.data.local.dao.PendingReceiptDao
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.remote.ApiClient
@@ -29,6 +30,7 @@ class MessageLifecycleStatusTest {
     private val database: AppDatabase = mock()
     private val conversationDao: ConversationDao = mock()
     private val messageDao: MessageDao = mock()
+    private val pendingReceiptDao: PendingReceiptDao = mock()
     private val apiClient: ApiClient = mock()
     private val webSocketManager: WebSocketManager = mock()
     private val networkMonitor: NetworkMonitor = mock()
@@ -42,6 +44,7 @@ class MessageLifecycleStatusTest {
     fun setUp() {
         whenever(database.conversationDao()).thenReturn(conversationDao)
         whenever(database.messageDao()).thenReturn(messageDao)
+        whenever(database.pendingReceiptDao()).thenReturn(pendingReceiptDao)
         whenever(networkMonitor.isOnline).thenReturn(isOnlineFlow)
         whenever(webSocketManager.events).thenReturn(wsEventsFlow)
         whenever(preferencesManager.lastSyncTime).thenReturn(flowOf(null))
@@ -50,6 +53,7 @@ class MessageLifecycleStatusTest {
         run {
             kotlinx.coroutines.runBlocking {
                 whenever(messageDao.getMessagesBySyncStatus(any())).thenReturn(emptyList())
+                whenever(pendingReceiptDao.getAll()).thenReturn(emptyList())
             }
         }
 
@@ -59,7 +63,7 @@ class MessageLifecycleStatusTest {
             webSocketManager,
             networkMonitor,
             preferencesManager,
-            kotlinx.coroutines.test.UnconfinedTestDispatcher()
+            ioDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher(),
         )
     }
 

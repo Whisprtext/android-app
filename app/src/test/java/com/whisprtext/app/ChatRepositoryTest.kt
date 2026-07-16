@@ -3,6 +3,7 @@ package com.whisprtext.app
 import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.dao.ConversationDao
 import com.whisprtext.app.data.local.dao.MessageDao
+import com.whisprtext.app.data.local.dao.PendingReceiptDao
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.remote.ApiClient
 import com.whisprtext.app.data.remote.model.ConversationSummaryDto
@@ -25,6 +26,7 @@ class ChatRepositoryTest {
     private val database: AppDatabase = mock()
     private val conversationDao: ConversationDao = mock()
     private val messageDao: MessageDao = mock()
+    private val pendingReceiptDao: PendingReceiptDao = mock()
     private val apiClient: ApiClient = mock()
     private val webSocketManager: com.whisprtext.app.data.remote.WebSocketManager = mock()
     private val networkMonitor: com.whisprtext.app.util.NetworkMonitor = mock()
@@ -35,10 +37,15 @@ class ChatRepositoryTest {
     fun setUp() {
         whenever(database.conversationDao()).thenReturn(conversationDao)
         whenever(database.messageDao()).thenReturn(messageDao)
+        whenever(database.pendingReceiptDao()).thenReturn(pendingReceiptDao)
         whenever(networkMonitor.isOnline).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(false))
         whenever(webSocketManager.events).thenReturn(kotlinx.coroutines.flow.MutableSharedFlow())
         whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-123"))
         whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
+        kotlinx.coroutines.runBlocking {
+            whenever(pendingReceiptDao.getAll()).thenReturn(emptyList())
+            whenever(messageDao.getMessagesBySyncStatus(any())).thenReturn(emptyList())
+        }
         repository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
 
