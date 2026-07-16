@@ -11,5 +11,10 @@ data class MessageEntity(
     val senderDeviceId: String,
     val encryptedContent: String,
     val createdAt: Long,
-    val syncStatus: String // "sending", "sent", "failed"
+    val syncStatus: String, // "pending", "sent", "failed", "delivered", "read"
+    val attachmentUrl: String? = null,
+    val mimeType: String? = null,
+    val sizeBytes: Long? = null,
+    val encryptedKey: String? = null,
+    val localFilePath: String? = null
 )

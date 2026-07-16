@@ -31,7 +31,8 @@ fun ChatBubble(
     theme: ChatTheme,
     isDark: Boolean,
     syncStatus: String? = null,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    mediaContent: @Composable (() -> Unit)? = null
 ) {
     val bubbleColor = remember(isSelf, isDark, theme) {
         if (isSelf) {
@@ -82,75 +83,95 @@ fun ChatBubble(
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Layout(
-                content = {
-                    androidx.compose.foundation.text.BasicText(
-                        text = content,
-                        style = textStyle
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = time,
-                            fontSize = 10.sp,
-                            color = textColor.copy(alpha = 0.6f)
-                        )
-                        if (isSelf && syncStatus != null) {
-                            val statusText = when (syncStatus) {
-                                "pending" -> "🕒"
-                                "failed" -> "✕"
-                                "sent" -> "✓"
-                                "delivered" -> "✓✓"
-                                "read" -> "✓✓✓"
-                                else -> "✓"
-                            }
-                            val statusColor = when (syncStatus) {
-                                "failed" -> Color.Red
-                                "read" -> Color(0xFF34B7F1)
-                                else -> textColor.copy(alpha = 0.6f)
-                            }
-                            Text(
-                                text = statusText,
-                                fontSize = 11.sp,
-                                color = statusColor
-                            )
-                        }
+            Column {
+                if (mediaContent != null) {
+                    Box(modifier = Modifier.padding(bottom = 6.dp)) {
+                        mediaContent()
                     }
                 }
-            ) { measurables, constraints ->
-                val textLayoutResult = textMeasurer.measure(
-                    text = content,
-                    style = textStyle,
-                    constraints = constraints
-                )
                 
-                val textPlaceable = measurables[0].measure(constraints)
-                val timePlaceable = measurables[1].measure(constraints.copy(minWidth = 0))
+                val showText = content.text.isNotEmpty() && content.text != "[Media]"
+                Layout(
+                    content = {
+                        if (showText) {
+                            androidx.compose.foundation.text.BasicText(
+                                text = content,
+                                style = textStyle
+                            )
+                        } else {
+                            // Dummy spacer to keep layout indexing consistent
+                            Spacer(modifier = Modifier.size(0.dp))
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = time,
+                                fontSize = 10.sp,
+                                color = textColor.copy(alpha = 0.6f)
+                            )
+                            if (isSelf && syncStatus != null) {
+                                val statusText = when (syncStatus) {
+                                    "pending" -> "🕒"
+                                    "failed" -> "✕"
+                                    "sent" -> "✓"
+                                    "delivered" -> "✓✓"
+                                    "read" -> "✓✓✓"
+                                    else -> "✓"
+                                }
+                                val statusColor = when (syncStatus) {
+                                    "failed" -> Color.Red
+                                    "read" -> Color(0xFF34B7F1)
+                                    else -> textColor.copy(alpha = 0.6f)
+                                }
+                                Text(
+                                    text = statusText,
+                                    fontSize = 11.sp,
+                                    color = statusColor
+                                )
+                            }
+                        }
+                    }
+                ) { measurables, constraints ->
+                    val textLayoutResult = if (showText) {
+                        textMeasurer.measure(
+                            text = content,
+                            style = textStyle,
+                            constraints = constraints
+                        )
+                    } else null
 
-                val parentWidth = constraints.maxWidth
+                    val textPlaceable = measurables[0].measure(constraints)
+                    val timePlaceable = measurables[1].measure(constraints.copy(minWidth = 0))
 
-                val lineCount = textLayoutResult.lineCount
-                val lastLineRight = if (lineCount > 0) textLayoutResult.getLineRight(lineCount - 1) else 0f
-                val lastLineLeft = if (lineCount > 0) textLayoutResult.getLineLeft(lineCount - 1) else 0f
-                val lastLineWidth = lastLineRight - lastLineLeft
+                    val parentWidth = constraints.maxWidth
 
-                val spacingPx = (8 * density).toInt()
-                val fitsOnLastLine = lineCount > 0 && (lastLineWidth + spacingPx + timePlaceable.width <= parentWidth)
+                    val lineCount = textLayoutResult?.lineCount ?: 0
+                    val lastLineRight = if (lineCount > 0 && textLayoutResult != null) textLayoutResult.getLineRight(lineCount - 1) else 0f
+                    val lastLineLeft = if (lineCount > 0 && textLayoutResult != null) textLayoutResult.getLineLeft(lineCount - 1) else 0f
+                    val lastLineWidth = lastLineRight - lastLineLeft
 
-                val layoutHeight = if (fitsOnLastLine) {
-                    maxOf(textPlaceable.height, timePlaceable.height)
-                } else {
-                    textPlaceable.height + timePlaceable.height
-                }
+                    val spacingPx = (8 * density).toInt()
+                    val fitsOnLastLine = showText && lineCount > 0 && (lastLineWidth + spacingPx + timePlaceable.width <= parentWidth)
 
-                layout(parentWidth, layoutHeight) {
-                    textPlaceable.placeRelative(0, 0)
-                    timePlaceable.placeRelative(
-                        x = parentWidth - timePlaceable.width,
-                        y = layoutHeight - timePlaceable.height
-                    )
+                    val layoutHeight = if (!showText) {
+                        timePlaceable.height
+                    } else if (fitsOnLastLine) {
+                        maxOf(textPlaceable.height, timePlaceable.height)
+                    } else {
+                        textPlaceable.height + timePlaceable.height
+                    }
+
+                    layout(parentWidth, layoutHeight) {
+                        if (showText) {
+                            textPlaceable.placeRelative(0, 0)
+                        }
+                        timePlaceable.placeRelative(
+                            x = parentWidth - timePlaceable.width,
+                            y = layoutHeight - timePlaceable.height
+                        )
+                    }
                 }
             }
         }

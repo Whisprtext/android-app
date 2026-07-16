@@ -106,8 +106,18 @@ class ApiClient(
         return executeRequest(request, type)
     }
 
-    suspend fun sendMessage(conversationId: String, content: String): MessageDto {
-        val json = gson.toJson(mapOf("content" to content))
+    suspend fun sendMessage(
+        conversationId: String,
+        content: String,
+        messageId: String? = null,
+        attachment: AttachmentDto? = null
+    ): MessageDto {
+        val params = mutableMapOf<String, Any>()
+        params["content"] = content
+        if (messageId != null) params["id"] = messageId
+        if (attachment != null) params["attachment"] = attachment
+
+        val json = gson.toJson(params)
         val body = json.toRequestBody(jsonMediaType)
         val request = Request.Builder()
             .url("$baseUrl/conversations/$conversationId/messages")
@@ -267,6 +277,60 @@ class ApiClient(
             .delete()
             .build()
         return executeStatusRequest(request)
+    }
+
+    suspend fun initMediaUpload(mimeType: String, sizeBytes: Long): MediaUploadInitResponse {
+        val json = gson.toJson(MediaUploadInitRequest(mimeType, sizeBytes))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/media/upload/init")
+            .post(body)
+            .build()
+        return executeRequest(request)
+    }
+
+    suspend fun completeMediaUpload(fileId: String, fileUrl: String): Boolean {
+        val json = gson.toJson(MediaUploadCompleteRequest(fileId, fileUrl))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/media/upload/complete")
+            .post(body)
+            .build()
+        return executeStatusRequest(request)
+    }
+
+    suspend fun getMediaDownloadUrl(fileUrl: String): MediaDownloadResponse {
+        val encodedUrl = java.net.URLEncoder.encode(fileUrl, "UTF-8")
+        val request = Request.Builder()
+            .url("$baseUrl/media/download?file_url=$encodedUrl")
+            .get()
+            .build()
+        return executeRequest(request)
+    }
+
+    suspend fun uploadEncryptedFile(uploadUrl: String, encryptedBytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        val mediaType = "application/octet-stream".toMediaType()
+        val body = encryptedBytes.toRequestBody(mediaType)
+        val request = Request.Builder()
+            .url(uploadUrl)
+            .put(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            response.isSuccessful
+        }
+    }
+
+    suspend fun downloadEncryptedFile(downloadUrl: String): ByteArray = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(downloadUrl)
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Unexpected code ${response.code} during media download")
+            }
+            response.body?.bytes() ?: throw IOException("Empty media download body")
+        }
     }
 
     private suspend fun executeStatusRequest(request: Request): Boolean = withContext(Dispatchers.IO) {

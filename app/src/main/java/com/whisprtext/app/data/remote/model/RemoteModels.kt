@@ -76,7 +76,38 @@ data class MessageDto(
     @SerializedName("sender_id") val senderId: String,
     @SerializedName("sender_device_id") val senderDeviceId: String,
     @SerializedName("encrypted_content") val encryptedContent: String,
-    @SerializedName("created_at") val createdAt: String
+    @SerializedName("created_at") val createdAt: String,
+    val attachments: List<AttachmentDto>? = null
+)
+
+data class AttachmentDto(
+    val id: String,
+    @SerializedName("message_id") val messageId: String,
+    @SerializedName("file_url") val fileUrl: String,
+    @SerializedName("mime_type") val mimeType: String,
+    @SerializedName("size_bytes") val sizeBytes: Long,
+    @SerializedName("encrypted_key") val encryptedKey: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+data class MediaUploadInitRequest(
+    @SerializedName("mime_type") val mimeType: String,
+    @SerializedName("size_bytes") val sizeBytes: Long
+)
+
+data class MediaUploadInitResponse(
+    @SerializedName("upload_url") val uploadUrl: String,
+    @SerializedName("file_url") val fileUrl: String,
+    @SerializedName("file_id") val fileId: String
+)
+
+data class MediaUploadCompleteRequest(
+    @SerializedName("file_id") val fileId: String,
+    @SerializedName("file_url") val fileUrl: String
+)
+
+data class MediaDownloadResponse(
+    @SerializedName("download_url") val downloadUrl: String
 )
 
 data class ReceiptDto(

@@ -168,21 +168,13 @@ class MainActivity : ComponentActivity() {
                             .background(MaterialTheme.colorScheme.background),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(180.dp)
-                                .clip(CircleShape)
-                                .background(Color.White),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(R.mipmap.ic_launcher_foreground)
-                                    .build(),
-                                contentDescription = "WhisprText Logo",
-                                modifier = Modifier.size(120.dp)
-                            )
-                        }
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(R.mipmap.ic_launcher_foreground)
+                                .build(),
+                            contentDescription = "WhisprText Logo",
+                            modifier = Modifier.size(180.dp)
+                        )
                     }
                 } else {
                     if (sessionToken == null) {

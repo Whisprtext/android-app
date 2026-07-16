@@ -52,6 +52,18 @@ import com.whisprtext.app.ui.theme.ChatTheme
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.util.ContactHelper
 import com.whisprtext.app.util.MarkdownParser
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.launch
+import java.io.File
+import android.content.Intent
+import android.net.Uri
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +78,45 @@ fun ChatScreen(
     val appearance = uiState.appearanceSettings
     val isDark = isSystemInDarkTheme()
     val theme = remember(appearance.presetId) { AppearancePresets.getTheme(appearance.presetId) }
+
+    val context = LocalContext.current
+
+    // The actual picker launcher — runs after permissions are granted
+    val pickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let {
+                val mime = context.contentResolver.getType(it) ?: "image/jpeg"
+                viewModel.sendMediaMessage(it.toString(), mime)
+            }
+        }
+    )
+
+    // Permission launcher — fires pickerLauncher only if all permissions are granted
+    val mediaPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+    } else {
+        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { results ->
+            // Open picker if at least images or video permission was granted
+            val granted = results.values.any { it }
+            if (granted) pickerLauncher.launch("*/*")
+        }
+    )
+
+    // Helper: check perms and launch picker or request perms
+    fun launchMediaPicker() {
+        val allGranted = mediaPermissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (allGranted) pickerLauncher.launch("*/*")
+        else permissionLauncher.launch(mediaPermissions)
+    }
+
+    var fullscreenMediaPath by remember { mutableStateOf<String?>(null) }
 
     val backgroundModifier = remember(theme, isDark) {
         val gradientColors = if (isDark) theme.gradientColorsDark else theme.gradientColorsLight
@@ -84,7 +135,6 @@ fun ChatScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    val context = LocalContext.current
     val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
     val displayTitle = remember(uiState.conversation, contactsMap) {
         val conversation = uiState.conversation
@@ -749,7 +799,7 @@ fun ChatScreen(
                                         )
                                     }
                                     IconButton(
-                                        onClick = { /* Media */ },
+                                        onClick = { launchMediaPicker() },
                                         modifier = Modifier.size(32.dp).align(Alignment.CenterVertically)
                                     ) {
                                         Icon(
@@ -878,6 +928,22 @@ fun MessageBubble(
     isDark: Boolean,
     onLongClick: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<ChatViewModel>()
+    var cachedFilePath by remember(message.id) { mutableStateOf<String?>(message.localFilePath) }
+    var fullscreenMediaPath by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Automatically trigger lazy download & decrypt when bubble is shown
+    if (!message.attachmentUrl.isNullOrEmpty() && cachedFilePath.isNullOrEmpty()) {
+        LaunchedEffect(message.id) {
+            val path = viewModel.getDecryptedFilePath(message)
+            if (path != null) {
+                cachedFilePath = path
+            }
+        }
+    }
+
     val parsedContent = remember(message.encryptedContent) {
         MarkdownParser.parse(message.encryptedContent, hideMarkers = true)
     }
@@ -888,6 +954,87 @@ fun MessageBubble(
             .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
     }
 
+    val hasAttachment = !message.attachmentUrl.isNullOrEmpty() || message.sizeBytes != null
+    val mediaContent: @Composable (() -> Unit)? = if (hasAttachment) {
+        {
+            val path = cachedFilePath
+            if (path != null && File(path).exists()) {
+                val isImage = message.mimeType?.startsWith("image/") == true
+                if (isImage) {
+                    AsyncImage(
+                        model = File(path),
+                        contentDescription = "Decrypted photo",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                fullscreenMediaPath = path
+                            },
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .clickable {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(Uri.fromFile(File(path)), message.mimeType ?: "video/mp4")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("▶ Play Video", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(message.mimeType ?: "", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        }
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (message.syncStatus == "pending") {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    } else if (message.syncStatus == "failed") {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                scope.launch {
+                                    // Retry upload via sync action on viewmodel
+                                    viewModel.sync()
+                                }
+                            }
+                        ) {
+                            Text("✕ Upload failed. Tap to retry.", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Downloading media...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    } else null
+
     ChatBubble(
         content = parsedContent,
         time = timeStr,
@@ -897,6 +1044,28 @@ fun MessageBubble(
         theme = theme,
         isDark = isDark,
         syncStatus = message.syncStatus,
-        onLongClick = onLongClick
+        onLongClick = onLongClick,
+        mediaContent = mediaContent
     )
+
+    fullscreenMediaPath?.let { path ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { fullscreenMediaPath = null }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable { fullscreenMediaPath = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = File(path),
+                    contentDescription = "Fullscreen E2EE image",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
 }

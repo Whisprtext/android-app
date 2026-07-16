@@ -125,4 +125,25 @@ class ChatViewModel(
             }
         }
     }
+
+    fun sendMediaMessage(uriString: String, mimeType: String) {
+        viewModelScope.launch {
+            val senderId = _currentUserId.value
+            if (senderId.isNotBlank()) {
+                _isLoading.value = true
+                _error.value = null
+                try {
+                    chatRepository.sendMediaMessage(conversationId, uriString, mimeType, senderId, "android-device")
+                } catch (e: Exception) {
+                    _error.value = e.message ?: "Failed to send media file"
+                } finally {
+                    _isLoading.value = false
+                }
+            }
+        }
+    }
+
+    suspend fun getDecryptedFilePath(message: MessageEntity): String? {
+        return chatRepository.downloadAndDecryptMedia(message)
+    }
 }

@@ -13,6 +13,9 @@ import com.whisprtext.app.data.remote.model.ConversationSummaryDto
 import com.whisprtext.app.data.remote.model.MessageDto
 import com.whisprtext.app.util.NetworkMonitor
 import com.whisprtext.app.util.NotificationHelper
+import com.whisprtext.app.util.MediaCrypto
+import android.net.Uri
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -388,9 +391,48 @@ class ChatRepository @JvmOverloads constructor(
             for (msg in failedList) {
                 try {
                     messageDao.insert(msg.copy(syncStatus = "pending"))
-                    val response = apiClient.sendMessage(msg.conversationId, msg.encryptedContent)
+
+                    val response = if (!msg.attachmentUrl.isNullOrEmpty() || msg.sizeBytes != null) {
+                        // It is a media message!
+                        val localFile = msg.localFilePath?.let { java.io.File(it) }
+                        if (localFile == null || !localFile.exists()) {
+                            // Can't retry if local file is gone
+                            messageDao.insert(msg.copy(syncStatus = "failed"))
+                            continue
+                        }
+                        val plaintextBytes = localFile.readBytes()
+                        val aesKey = MediaCrypto.hexToBytes(msg.encryptedKey ?: "")
+                        val encryptedBytes = MediaCrypto.encrypt(plaintextBytes, aesKey)
+
+                        val initRes = apiClient.initMediaUpload(msg.mimeType ?: "image/jpeg", encryptedBytes.size.toLong())
+                        val uploadSuccess = apiClient.uploadEncryptedFile(initRes.uploadUrl, encryptedBytes)
+                        if (!uploadSuccess) throw Exception("Upload failed")
+
+                        apiClient.completeMediaUpload(initRes.fileId, initRes.fileUrl)
+
+                        val attDto = com.whisprtext.app.data.remote.model.AttachmentDto(
+                            id = UUID.randomUUID().toString(),
+                            messageId = msg.id,
+                            fileUrl = initRes.fileUrl,
+                            mimeType = msg.mimeType ?: "image/jpeg",
+                            sizeBytes = plaintextBytes.size.toLong(),
+                            encryptedKey = msg.encryptedKey
+                        )
+
+                        apiClient.sendMessage(
+                            conversationId = msg.conversationId,
+                            content = msg.encryptedContent,
+                            messageId = msg.id,
+                            attachment = attDto
+                        )
+                    } else {
+                        // Standard text message retry
+                        apiClient.sendMessage(msg.conversationId, msg.encryptedContent)
+                    }
+
                     messageDao.deleteById(msg.id)
-                    upsertMessage(response.toEntity("sent"))
+                    val localFile = msg.localFilePath
+                    upsertMessage(response.toEntity("sent").copy(localFilePath = localFile))
 
                     val conv = conversationDao.getById(msg.conversationId)
                     if (conv != null) {
@@ -557,6 +599,7 @@ class ChatRepository @JvmOverloads constructor(
     }
 
     private fun MessageDto.toEntity(status: String): MessageEntity {
+        val firstAtt = attachments?.firstOrNull()
         return MessageEntity(
             id = id,
             conversationId = conversationId,
@@ -564,7 +607,11 @@ class ChatRepository @JvmOverloads constructor(
             senderDeviceId = senderDeviceId,
             encryptedContent = encryptedContent,
             createdAt = createdAt.toEpochMillis(),
-            syncStatus = status
+            syncStatus = status,
+            attachmentUrl = firstAtt?.fileUrl,
+            mimeType = firstAtt?.mimeType,
+            sizeBytes = firstAtt?.sizeBytes,
+            encryptedKey = firstAtt?.encryptedKey
         )
     }
 
@@ -623,6 +670,149 @@ class ChatRepository @JvmOverloads constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    suspend fun sendMediaMessage(
+        conversationId: String,
+        uriString: String,
+        mimeType: String,
+        senderId: String,
+        senderDeviceId: String
+    ) {
+        val context = context ?: throw Exception("Context is null")
+        val uri = Uri.parse(uriString)
+        val plaintextBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw Exception("Failed to read file bytes")
+
+        if (plaintextBytes.size > 10 * 1024 * 1024) {
+            throw Exception("File size exceeds 10MB limit")
+        }
+
+        // Generate key and encrypt media
+        val aesKey = MediaCrypto.generateAESKey()
+        val encryptedBytes = MediaCrypto.encrypt(plaintextBytes, aesKey)
+
+        // Cache file locally
+        val cacheDir = File(context.cacheDir, "media_cache").apply { mkdirs() }
+        val localFile = File(cacheDir, UUID.randomUUID().toString())
+        localFile.writeBytes(plaintextBytes)
+
+        val tempId = UUID.randomUUID().toString()
+        val localMsg = MessageEntity(
+            id = tempId,
+            conversationId = conversationId,
+            senderId = senderId,
+            senderDeviceId = senderDeviceId,
+            encryptedContent = "[Media]",
+            createdAt = System.currentTimeMillis(),
+            syncStatus = "pending",
+            attachmentUrl = "", // Set later on success
+            mimeType = mimeType,
+            sizeBytes = plaintextBytes.size.toLong(),
+            encryptedKey = MediaCrypto.bytesToHex(aesKey),
+            localFilePath = localFile.absolutePath
+        )
+        messageDao.insert(localMsg)
+
+        // Optimistically update conversation
+        val conv = conversationDao.getById(conversationId)
+        if (conv != null) {
+            conversationDao.insert(conv.copy(
+                lastMessageText = "[Media]",
+                lastMessageTime = localMsg.createdAt
+            ))
+        }
+
+        try {
+            // Step 1: Init media upload
+            val initRes = apiClient.initMediaUpload(mimeType, encryptedBytes.size.toLong())
+
+            // Step 2: PUT encrypted bytes to storage
+            val uploadSuccess = apiClient.uploadEncryptedFile(initRes.uploadUrl, encryptedBytes)
+            if (!uploadSuccess) {
+                throw Exception("Failed to upload encrypted file bytes")
+            }
+
+            // Step 3: Complete upload
+            apiClient.completeMediaUpload(initRes.fileId, initRes.fileUrl)
+
+            // Step 4: Create message with attachment
+            val attDto = com.whisprtext.app.data.remote.model.AttachmentDto(
+                id = UUID.randomUUID().toString(),
+                messageId = tempId,
+                fileUrl = initRes.fileUrl,
+                mimeType = mimeType,
+                sizeBytes = plaintextBytes.size.toLong(),
+                encryptedKey = MediaCrypto.bytesToHex(aesKey)
+            )
+
+            val response = apiClient.sendMessage(
+                conversationId = conversationId,
+                content = "[Media]",
+                messageId = tempId,
+                attachment = attDto
+            )
+
+            // Success: delete temp message and insert server confirmed message
+            messageDao.deleteById(tempId)
+
+            val finalEntity = response.toEntity("sent").copy(
+                localFilePath = localFile.absolutePath
+            )
+            upsertMessage(finalEntity)
+
+            val updatedConv = conversationDao.getById(conversationId)
+            if (updatedConv != null) {
+                conversationDao.insert(updatedConv.copy(
+                    lastMessageText = "[Media]",
+                    lastMessageTime = response.createdAt.toEpochMillis()
+                ))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            messageDao.insert(localMsg.copy(syncStatus = "failed"))
+        }
+    }
+
+    suspend fun downloadAndDecryptMedia(message: MessageEntity): String? {
+        val context = context ?: return null
+        if (message.attachmentUrl.isNullOrEmpty() || message.encryptedKey.isNullOrEmpty()) {
+            return null
+        }
+
+        // If local file path is already present and exists, return it
+        if (!message.localFilePath.isNullOrEmpty()) {
+            val file = File(message.localFilePath)
+            if (file.exists()) {
+                return message.localFilePath
+            }
+        }
+
+        try {
+            // Step 1: Get download URL
+            val downloadRes = apiClient.getMediaDownloadUrl(message.attachmentUrl)
+
+            // Step 2: Download encrypted bytes
+            val encryptedBytes = apiClient.downloadEncryptedFile(downloadRes.downloadUrl)
+
+            // Step 3: Decrypt bytes
+            val keyBytes = MediaCrypto.hexToBytes(message.encryptedKey)
+            val decryptedBytes = MediaCrypto.decrypt(encryptedBytes, keyBytes)
+
+            // Step 4: Cache locally
+            val cacheDir = File(context.cacheDir, "media_cache").apply { mkdirs() }
+            val localFile = File(cacheDir, UUID.randomUUID().toString())
+            localFile.writeBytes(decryptedBytes)
+
+            // Step 5: Update db
+            val updatedMsg = message.copy(localFilePath = localFile.absolutePath)
+            messageDao.insert(updatedMsg)
+
+            return localFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
         }
     }
 }
