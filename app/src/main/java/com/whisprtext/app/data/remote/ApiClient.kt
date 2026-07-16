@@ -31,6 +31,9 @@ class ApiClient(
         }
         .build()
 
+    // Separate client without auth interceptor for direct S3/R2 presigned URL requests
+    private val storageClient = OkHttpClient.Builder().build()
+
     private val gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .create()
@@ -315,7 +318,7 @@ class ApiClient(
             .url(uploadUrl)
             .put(body)
             .build()
-        client.newCall(request).execute().use { response ->
+        storageClient.newCall(request).execute().use { response ->
             response.isSuccessful
         }
     }
@@ -325,7 +328,7 @@ class ApiClient(
             .url(downloadUrl)
             .get()
             .build()
-        client.newCall(request).execute().use { response ->
+        storageClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("Unexpected code ${response.code} during media download")
             }

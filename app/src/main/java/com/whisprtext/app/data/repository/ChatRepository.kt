@@ -660,10 +660,6 @@ class ChatRepository @JvmOverloads constructor(
 
     suspend fun registerPushToken(token: String) {
         try {
-            val savedToken = preferencesManager.pushToken.first()
-            if (savedToken == token) {
-                return
-            }
             val success = apiClient.updatePushToken(token)
             if (success) {
                 preferencesManager.savePushToken(token)
