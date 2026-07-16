@@ -5,6 +5,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.ui.component.InitialsAvatar
+import com.whisprtext.app.ui.component.StatusAvatar
 import androidx.compose.ui.text.font.FontWeight
 import com.whisprtext.app.ui.theme.DynaPuffFontFamily
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
@@ -61,6 +63,9 @@ fun ConversationListScreen(
 
     val pagerState = rememberPagerState(pageCount = { HomeTab.entries.size })
     val scope = rememberCoroutineScope()
+
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -109,41 +114,129 @@ fun ConversationListScreen(
                         }
                     )
                 } else {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                when (pagerState.currentPage) {
-                                    0 -> "WhisprText"
-                                    1 -> "Community"
-                                    2 -> "Calls"
-                                    3 -> "Whispr AI"
-                                    4 -> "Tracking"
-                                    else -> "WhisprText"
-                                },
-                                style = MaterialTheme.typography.headlineSmall.copy(
-                                    fontFamily = DynaPuffFontFamily,
-                                    fontWeight = FontWeight.SemiBold
+                    Column {
+                        TopAppBar(
+                            title = {
+                                Text(
+                                    when (pagerState.currentPage) {
+                                        0 -> "WhisprText"
+                                        1 -> "Community"
+                                        2 -> "Calls"
+                                        3 -> "Whispr AI"
+                                        4 -> "Tracking"
+                                        else -> "WhisprText"
+                                    },
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        fontFamily = DynaPuffFontFamily,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 )
-                            )
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent
-                        ),
-                        actions = {
-                            if (pagerState.currentPage == 0) {
-                                IconButton(onClick = { viewModel.sync() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.Transparent
+                            ),
+                            actions = {
+                                if (pagerState.currentPage == 0) {
+                                    IconButton(onClick = { isSearchActive = !isSearchActive }) {
+                                        Icon(
+                                            imageVector = if (isSearchActive) Icons.Rounded.SearchOff else Icons.Rounded.Search,
+                                            contentDescription = "Search"
+                                        )
+                                    }
+                                    IconButton(onClick = { /* TODO: Implement payment screen navigation */ }) {
+                                        Icon(Icons.Rounded.CreditCard, contentDescription = "Payments")
+                                    }
+                                }
+                                IconButton(onClick = onProfileClick) {
+                                    InitialsAvatar(
+                                        id = uiState.username ?: "Me",
+                                        avatarUrl = uiState.avatarUrl,
+                                        modifier = Modifier.size(32.dp)
+                                    )
                                 }
                             }
-                            IconButton(onClick = onProfileClick) {
-                                InitialsAvatar(
-                                    id = uiState.username ?: "Me",
-                                    avatarUrl = uiState.avatarUrl,
-                                    modifier = Modifier.size(32.dp)
-                                )
+                        )
+                        if (pagerState.currentPage == 0) {
+                            LazyRow(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // First show "Your Story" (me)
+                                item {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        StatusAvatar(
+                                            avatarUrl = uiState.avatarUrl,
+                                            id = uiState.username ?: "Me",
+                                            showBorder = false,
+                                            showPlusIcon = true
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "My Status",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                // Then show contacts' avatars
+                                val statusConversations = uiState.conversations.filter { it.avatarUrl != null || it.title != null }
+                                items(statusConversations) { conversation ->
+                                    val name = remember(conversation, contactsMap) {
+                                        if (conversation.type == "direct") {
+                                            val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
+                                            if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
+                                                contactsMap[normalizedPhone] ?: conversation.title ?: conversation.username ?: "Chat"
+                                            } else {
+                                                conversation.title ?: conversation.username ?: "Chat"
+                                            }
+                                        } else {
+                                            conversation.title ?: "Chat"
+                                        }
+                                    }
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        StatusAvatar(
+                                            avatarUrl = conversation.avatarUrl,
+                                            id = conversation.id
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = name.take(8),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
-                    )
+                        if (pagerState.currentPage == 0 && isSearchActive) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                                placeholder = { Text("Search chats...") },
+                                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Rounded.Clear, contentDescription = "Clear")
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                )
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -224,11 +317,40 @@ fun ConversationListScreen(
                                 Text("No active conversations. Start a new one!", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                items(uiState.conversations) { conversation ->
-                                    val isSelected = selectedConversationIds.contains(conversation.id)
+                            val filteredConversations = remember(uiState.conversations, searchQuery) {
+                                if (searchQuery.isEmpty()) {
+                                    uiState.conversations
+                                } else {
+                                    uiState.conversations.filter { conversation ->
+                                        val name = if (conversation.type == "direct") {
+                                            val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
+                                            if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
+                                                contactsMap[normalizedPhone] ?: conversation.title ?: conversation.username ?: ""
+                                            } else {
+                                                conversation.title ?: conversation.username ?: ""
+                                            }
+                                        } else {
+                                            conversation.title ?: ""
+                                        }
+                                        name.contains(searchQuery, ignoreCase = true) ||
+                                                (conversation.lastMessageText?.contains(searchQuery, ignoreCase = true) == true)
+                                    }
+                                }
+                            }
+
+                            if (filteredConversations.isEmpty() && searchQuery.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("No chats match \"$searchQuery\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    items(filteredConversations) { conversation ->
+                                        val isSelected = selectedConversationIds.contains(conversation.id)
                                     ConversationItem(
                                         conversation = conversation,
                                         contactsMap = contactsMap,
@@ -258,8 +380,9 @@ fun ConversationListScreen(
                                 }
                             }
                         }
+                    }
 
-                        if (uiState.error != null) {
+                    if (uiState.error != null) {
                             Snackbar(
                                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                                 action = {
