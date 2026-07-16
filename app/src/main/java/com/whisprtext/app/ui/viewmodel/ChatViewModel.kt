@@ -126,14 +126,22 @@ class ChatViewModel(
         }
     }
 
-    fun sendMediaMessage(uriString: String, mimeType: String) {
+    fun sendMediaMessage(
+        uriString: String,
+        mimeType: String,
+        content: String = "[Media]",
+        extraUris: List<Pair<String, String>> = emptyList()
+    ) {
         viewModelScope.launch {
             val senderId = _currentUserId.value
             if (senderId.isNotBlank()) {
                 _isLoading.value = true
                 _error.value = null
                 try {
-                    chatRepository.sendMediaMessage(conversationId, uriString, mimeType, senderId, "android-device")
+                    chatRepository.sendMediaMessage(
+                        conversationId, uriString, mimeType, senderId, "android-device",
+                        content = content, extraUris = extraUris
+                    )
                 } catch (e: Exception) {
                     _error.value = e.message ?: "Failed to send media file"
                 } finally {

@@ -22,6 +22,16 @@ object AppearancePresets {
     val themes = listOf(
         ChatTheme(
             id = "default",
+            name = "Whispr Soft",
+            backgroundColorLight = Color(0xFFFFF7FB),
+            backgroundColorDark = Color(0xFF1C1B2E),
+            selfBubbleColorLight = Color(0xFFD7BAFF),
+            selfBubbleColorDark = Color(0xFF673B91),
+            otherBubbleColorLight = Color(0xFFE7E0EB),
+            otherBubbleColorDark = Color(0xFF25233A)
+        ),
+        ChatTheme(
+            id = "classic_blue",
             name = "Classic Blue",
             backgroundColorLight = Color(0xFFF5F7FB),
             backgroundColorDark = Color(0xFF121212),

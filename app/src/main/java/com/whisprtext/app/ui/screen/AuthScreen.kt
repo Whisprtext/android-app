@@ -10,7 +10,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import com.whisprtext.app.ui.theme.DynaPuffFontFamily
 import com.whisprtext.app.ui.viewmodel.AuthState
+
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 
 import androidx.compose.foundation.text.KeyboardActions
@@ -50,9 +53,11 @@ fun AuthScreen(
         ) {
             Text(
                 text = "WhisprText",
-                fontSize = 32.sp,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.headlineLarge
+                style = MaterialTheme.typography.displaySmall.copy(
+                    color = MaterialTheme.colorScheme.primary,
+                    fontFamily = DynaPuffFontFamily,
+                    fontWeight = FontWeight.SemiBold
+                )
             )
 
             Text(

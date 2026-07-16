@@ -44,7 +44,6 @@ fun ProfileScreen(
         unfocusedContainerColor = Color.Transparent,
         focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = Color.Transparent,
-        cursorColor = MaterialTheme.colorScheme.primary,
         errorContainerColor = Color.Transparent,
     )
 

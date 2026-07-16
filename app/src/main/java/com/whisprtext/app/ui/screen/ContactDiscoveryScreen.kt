@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.whisprtext.app.data.remote.model.UserDto
 import com.whisprtext.app.ui.component.InitialsAvatar
+import com.whisprtext.app.ui.theme.DynaPuffFontFamily
 import com.whisprtext.app.ui.viewmodel.ContactDiscoveryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -150,7 +151,13 @@ fun ContactDiscoveryScreen(
                 ) {
                     if (matchedContacts.isNotEmpty()) {
                         item {
-                            Text("Contacts on WhisprText", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                "Contacts on WhisprText",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = DynaPuffFontFamily,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            )
                         }
                         items(matchedContacts) { user ->
                             ListItem(
@@ -176,7 +183,13 @@ fun ContactDiscoveryScreen(
                     if (unmatchedContacts.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Invite to WhisprText", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.outline)
+                            Text(
+                                "Invite to WhisprText",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontFamily = DynaPuffFontFamily,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            )
                         }
                         items(unmatchedContacts) { contact ->
                             Card(

@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.whisprtext.app.ui.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,7 +36,6 @@ fun PrivacyScreen(
         unfocusedContainerColor = Color.Transparent,
         focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = Color.Transparent,
-        cursorColor = MaterialTheme.colorScheme.primary,
         errorContainerColor = Color.Transparent,
     )
 
@@ -112,7 +110,7 @@ fun PrivacyScreen(
                             text = errorMessage ?: "",
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(12.dp),
-                            fontSize = 14.sp
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -147,7 +145,7 @@ fun PrivacyScreen(
                             Icon(Icons.Default.PersonSearch, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text("Discoverable by Username", fontSize = 15.sp)
+                                Text("Discoverable by Username", style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     "Allow searches by username",
                                     style = MaterialTheme.typography.bodySmall,
@@ -170,7 +168,7 @@ fun PrivacyScreen(
                             Icon(Icons.Default.ContactPhone, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text("Discoverable by Phone", fontSize = 15.sp)
+                                Text("Discoverable by Phone", style = MaterialTheme.typography.bodyLarge)
                                 Text(
                                     "Allow matching from other contacts list",
                                     style = MaterialTheme.typography.bodySmall,

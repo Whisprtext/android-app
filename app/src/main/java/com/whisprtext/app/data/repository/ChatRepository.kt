@@ -485,8 +485,17 @@ class ChatRepository @JvmOverloads constructor(
         val existing = messageDao.getById(message.id)
         if (existing == null) {
             messageDao.insert(message.copy(syncStatus = status))
-        } else if (getStatusPrecedence(status) > getStatusPrecedence(existing.syncStatus)) {
-            messageDao.insert(existing.copy(syncStatus = status))
+        } else {
+            // Merge: preserve local-only fields (localFilePath), update all server fields
+            messageDao.insert(existing.copy(
+                syncStatus = if (getStatusPrecedence(status) > getStatusPrecedence(existing.syncStatus)) status else existing.syncStatus,
+                encryptedContent = if (message.encryptedContent != "[Media]") message.encryptedContent else existing.encryptedContent,
+                senderDeviceId = message.senderDeviceId,
+                attachmentUrl = message.attachmentUrl?.takeIf { it.isNotEmpty() } ?: existing.attachmentUrl,
+                mimeType = message.mimeType?.takeIf { it.isNotEmpty() } ?: existing.mimeType,
+                sizeBytes = message.sizeBytes ?: existing.sizeBytes,
+                encryptedKey = message.encryptedKey?.takeIf { it.isNotEmpty() } ?: existing.encryptedKey
+            ))
         }
     }
 
@@ -674,36 +683,40 @@ class ChatRepository @JvmOverloads constructor(
         uriString: String,
         mimeType: String,
         senderId: String,
-        senderDeviceId: String
+        senderDeviceId: String,
+        content: String = "[Media]",
+        extraUris: List<Pair<String, String>> = emptyList()
     ) {
         val context = context ?: throw Exception("Context is null")
-        val uri = Uri.parse(uriString)
-        val plaintextBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+
+        // Upload primary media
+        val primaryUri = Uri.parse(uriString)
+        val plaintextBytes = context.contentResolver.openInputStream(primaryUri)?.use { it.readBytes() }
             ?: throw Exception("Failed to read file bytes")
 
         if (plaintextBytes.size > 10 * 1024 * 1024) {
             throw Exception("File size exceeds 10MB limit")
         }
 
-        // Generate key and encrypt media
         val aesKey = MediaCrypto.generateAESKey()
         val encryptedBytes = MediaCrypto.encrypt(plaintextBytes, aesKey)
 
-        // Cache file locally
         val cacheDir = File(context.cacheDir, "media_cache").apply { mkdirs() }
         val localFile = File(cacheDir, UUID.randomUUID().toString())
         localFile.writeBytes(plaintextBytes)
 
         val tempId = UUID.randomUUID().toString()
+        val displayContent = if (content.isNotBlank() && content != "[Media]") content else "[Media]"
+
         val localMsg = MessageEntity(
             id = tempId,
             conversationId = conversationId,
             senderId = senderId,
             senderDeviceId = senderDeviceId,
-            encryptedContent = "[Media]",
+            encryptedContent = displayContent,
             createdAt = System.currentTimeMillis(),
             syncStatus = "pending",
-            attachmentUrl = "", // Set later on success
+            attachmentUrl = "",
             mimeType = mimeType,
             sizeBytes = plaintextBytes.size.toLong(),
             encryptedKey = MediaCrypto.bytesToHex(aesKey),
@@ -711,48 +724,70 @@ class ChatRepository @JvmOverloads constructor(
         )
         messageDao.insert(localMsg)
 
-        // Optimistically update conversation
         val conv = conversationDao.getById(conversationId)
+        val lastMsgText = if (content.isNotBlank() && content != "[Media]") content else "[Media]"
         if (conv != null) {
             conversationDao.insert(conv.copy(
-                lastMessageText = "[Media]",
+                lastMessageText = lastMsgText,
                 lastMessageTime = localMsg.createdAt
             ))
         }
 
         try {
-            // Step 1: Init media upload
+            // Step 1-3: Upload primary media
             val initRes = apiClient.initMediaUpload(mimeType, encryptedBytes.size.toLong())
-
-            // Step 2: PUT encrypted bytes to storage
             val uploadSuccess = apiClient.uploadEncryptedFile(initRes.uploadUrl, encryptedBytes)
-            if (!uploadSuccess) {
-                throw Exception("Failed to upload encrypted file bytes")
-            }
-
-            // Step 3: Complete upload
+            if (!uploadSuccess) throw Exception("Failed to upload encrypted file bytes")
             apiClient.completeMediaUpload(initRes.fileId, initRes.fileUrl)
 
-            // Step 4: Create message with attachment
-            val attDto = com.whisprtext.app.data.remote.model.AttachmentDto(
-                id = UUID.randomUUID().toString(),
-                messageId = tempId,
-                fileUrl = initRes.fileUrl,
-                mimeType = mimeType,
-                sizeBytes = plaintextBytes.size.toLong(),
-                encryptedKey = MediaCrypto.bytesToHex(aesKey)
+            val attDtos = mutableListOf(
+                com.whisprtext.app.data.remote.model.AttachmentDto(
+                    id = UUID.randomUUID().toString(),
+                    messageId = tempId,
+                    fileUrl = initRes.fileUrl,
+                    mimeType = mimeType,
+                    sizeBytes = plaintextBytes.size.toLong(),
+                    encryptedKey = MediaCrypto.bytesToHex(aesKey)
+                )
             )
 
+            // Upload extra media files
+            for ((extraUriStr, extraMime) in extraUris) {
+                val extraUri = Uri.parse(extraUriStr)
+                val extraPlaintext = context.contentResolver.openInputStream(extraUri)?.use { it.readBytes() }
+                    ?: continue
+                if (extraPlaintext.size > 10 * 1024 * 1024) continue
+
+                val extraKey = MediaCrypto.generateAESKey()
+                val extraEncrypted = MediaCrypto.encrypt(extraPlaintext, extraKey)
+
+                val extraInit = apiClient.initMediaUpload(extraMime, extraEncrypted.size.toLong())
+                val extraUploadOk = apiClient.uploadEncryptedFile(extraInit.uploadUrl, extraEncrypted)
+                if (!extraUploadOk) continue
+                apiClient.completeMediaUpload(extraInit.fileId, extraInit.fileUrl)
+
+                attDtos.add(
+                    com.whisprtext.app.data.remote.model.AttachmentDto(
+                        id = UUID.randomUUID().toString(),
+                        messageId = tempId,
+                        fileUrl = extraInit.fileUrl,
+                        mimeType = extraMime,
+                        sizeBytes = extraPlaintext.size.toLong(),
+                        encryptedKey = MediaCrypto.bytesToHex(extraKey)
+                    )
+                )
+            }
+
+            // Step 4: Send message with all attachments
             val response = apiClient.sendMessage(
                 conversationId = conversationId,
-                content = "[Media]",
+                content = displayContent,
                 messageId = tempId,
-                attachment = attDto
+                attachment = attDtos.first(),
+                attachments = attDtos.drop(1).ifEmpty { null }
             )
 
-            // Success: delete temp message and insert server confirmed message
             messageDao.deleteById(tempId)
-
             val finalEntity = response.toEntity("sent").copy(
                 localFilePath = localFile.absolutePath
             )
@@ -761,7 +796,7 @@ class ChatRepository @JvmOverloads constructor(
             val updatedConv = conversationDao.getById(conversationId)
             if (updatedConv != null) {
                 conversationDao.insert(updatedConv.copy(
-                    lastMessageText = "[Media]",
+                    lastMessageText = lastMsgText,
                     lastMessageTime = response.createdAt.toEpochMillis()
                 ))
             }

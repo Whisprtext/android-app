@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import com.whisprtext.app.ui.theme.PoppinsFontFamily
+import androidx.compose.ui.text.font.FontWeight
 import coil.compose.AsyncImage
 
 @Composable
@@ -47,7 +49,9 @@ fun InitialsAvatar(
         Text(
             text = initials,
             color = Color.White,
-            fontSize = fontSize
+            fontSize = fontSize,
+            fontFamily = PoppinsFontFamily,
+            fontWeight = FontWeight.SemiBold
         )
 
         if (!avatarUrl.isNullOrBlank() && !isError) {

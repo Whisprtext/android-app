@@ -22,13 +22,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.whisprtext.app.ui.component.ChatBubble
-import com.whisprtext.app.ui.component.DoodleBackground
+import com.whisprtext.app.ui.component.DoodleBorderBackground
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.ChatTheme
 import com.whisprtext.app.ui.viewmodel.AppearanceViewModel
 import com.whisprtext.app.util.MarkdownParser
+import com.whisprtext.app.data.model.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +37,11 @@ fun AppearanceScreen(
     onBackClick: () -> Unit
 ) {
     val settings by viewModel.appearanceSettings.collectAsState()
-    val isDark = isSystemInDarkTheme()
+    val isDark = when (settings.themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
     val currentTheme = AppearancePresets.getTheme(settings.presetId)
 
     Scaffold(
@@ -62,8 +66,7 @@ fun AppearanceScreen(
                 )
             }
         }
-    )
- { innerPadding ->
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -72,6 +75,34 @@ fun AppearanceScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Theme Mode Selection
+            Text("App Theme", style = MaterialTheme.typography.titleMedium)
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SegmentedButton(
+                    selected = settings.themeMode == ThemeMode.LIGHT,
+                    onClick = { viewModel.updateThemeMode(ThemeMode.LIGHT) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
+                ) {
+                    Text("Light")
+                }
+                SegmentedButton(
+                    selected = settings.themeMode == ThemeMode.DARK,
+                    onClick = { viewModel.updateThemeMode(ThemeMode.DARK) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
+                ) {
+                    Text("Dark")
+                }
+                SegmentedButton(
+                    selected = settings.themeMode == ThemeMode.SYSTEM,
+                    onClick = { viewModel.updateThemeMode(ThemeMode.SYSTEM) },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+                ) {
+                    Text("System")
+                }
+            }
+
             // Demo Chat View
             Text("Preview", style = MaterialTheme.typography.titleMedium)
             DemoChatView(currentTheme, settings.useDoodles, settings.doodleStyle, isDark)
@@ -160,10 +191,10 @@ fun DemoChatView(
             .padding(12.dp)
     ) {
         if (useDoodles) {
-            DoodleBackground(
+            DoodleBorderBackground(
                 style = doodleStyle,
                 alpha = 0.1f,
-                color = if (isDark) Color.White else Color.Black
+                color = Color.Black.copy(alpha = 0.8f)
             )
         }
 
@@ -220,7 +251,7 @@ fun ThemeOption(theme: ChatTheme, isSelected: Boolean, isDark: Boolean, onClick:
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = theme.name,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
     }
@@ -241,7 +272,7 @@ fun DoodleStyleOption(style: Int, isSelected: Boolean, onClick: () -> Unit) {
             .clickable { onClick() }
             .padding(4.dp)
     ) {
-        DoodleBackground(
+        DoodleBorderBackground(
             style = style,
             alpha = 0.3f,
             color = MaterialTheme.colorScheme.onSurface

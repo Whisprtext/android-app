@@ -19,6 +19,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.whisprtext.app.ui.theme.ChatTheme
+import com.whisprtext.app.ui.theme.InterFontFamily
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -57,7 +58,8 @@ fun ChatBubble(
     val textStyle = remember(textColor) {
         TextStyle(
             color = textColor,
-            fontSize = 16.sp
+            fontSize = 16.sp,
+            fontFamily = InterFontFamily
         )
     }
 

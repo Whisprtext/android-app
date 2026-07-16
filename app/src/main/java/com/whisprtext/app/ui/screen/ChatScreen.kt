@@ -40,18 +40,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.text.BasicTextField
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.component.ChatBubble
-import com.whisprtext.app.ui.component.DoodleBackground
+import com.whisprtext.app.ui.component.DoodleBorderBackground
 import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.ChatTheme
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.util.ContactHelper
 import com.whisprtext.app.util.MarkdownParser
+import com.whisprtext.app.data.model.ThemeMode
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
@@ -76,7 +76,11 @@ fun ChatScreen(
     val otherUser = uiState.otherUser
     val currentUserId by viewModel.currentUserId.collectAsState()
     val appearance = uiState.appearanceSettings
-    val isDark = isSystemInDarkTheme()
+    val isDark = when (appearance.themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
     val theme = remember(appearance.presetId) { AppearancePresets.getTheme(appearance.presetId) }
 
     val context = LocalContext.current
@@ -415,10 +419,10 @@ fun ChatScreen(
     ) {
         if (appearance.useDoodles) {
             val doodleModifier = remember { Modifier.graphicsLayer() }
-            DoodleBackground(
+            DoodleBorderBackground(
                 style = appearance.doodleStyle,
-                alpha = appearance.doodleAlpha,
-                color = if (isDark) Color.White else Color.Black,
+                alpha = appearance.doodleAlpha * 0.6f, // Slightly more subtle
+                color = Color.Black.copy(alpha = 0.8f), // Always black outline style as requested
                 modifier = doodleModifier
             )
         }
@@ -428,161 +432,85 @@ fun ChatScreen(
             topBar = {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
-                    shadowElevation = 4.dp,
+                    shape = if (isHeaderExpanded) RoundedCornerShape(0.dp) else RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                    shadowElevation = if (isHeaderExpanded) 0.dp else 4.dp,
                     color = MaterialTheme.colorScheme.surface,
-                    border = if (isDark) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
+                    border = if (isDark && !isHeaderExpanded) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .statusBarsPadding()
-                                .padding(horizontal = 4.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onBackClick) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-
-                            val targetUsername = uiState.conversation?.username
-                            val isDirect = uiState.conversation?.type == "direct"
-                            
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable(enabled = isDirect && !targetUsername.isNullOrEmpty()) {
-                                        if (!isHeaderExpanded) {
-                                            keyboardController?.hide()
-                                            focusManager.clearFocus()
-                                            isHeaderExpanded = true
-                                        } else {
-                                            isHeaderExpanded = false
-                                        }
-                                    }
-                                    .padding(vertical = 8.dp, horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (!isHeaderExpanded) {
-                                    if (isDirect) {
-                                        InitialsAvatar(
-                                            id = targetUsername ?: displayTitle,
-                                            avatarUrl = otherUser?.avatarUrl,
-                                            modifier = Modifier.size(36.dp),
-                                            fontSize = 16.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                    }
-
-                                    Column {
-                                        Text(
-                                            text = displayTitle,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        if (isDirect && otherUser?.bio?.isNotEmpty() == true) {
-                                            Text(
-                                                text = otherUser.bio,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                maxLines = 1,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    Text(
-                                        text = displayTitle,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.padding(start = 8.dp)
-                                    )
-                                }
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { /* Voice Call */ }) {
-                                    Icon(Icons.Default.Phone, contentDescription = "Voice Call")
-                                }
-                                IconButton(onClick = { /* Video Call */ }) {
-                                    Icon(Icons.Default.Videocam, contentDescription = "Video Call")
-                                }
-                                IconButton(onClick = { /* Menu */ }) {
-                                    Icon(Icons.Default.Menu, contentDescription = "Menu")
-                                }
-                            }
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
 
-                        AnimatedVisibility(
-                            visible = isHeaderExpanded,
-                            enter = expandVertically(
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessLow
-                                )
-                            ) + fadeIn(animationSpec = tween(500)),
-                            exit = shrinkVertically(
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessLow
-                                )
-                            ) + fadeOut(animationSpec = tween(400))
+                        val targetUsername = uiState.conversation?.username
+                        val isDirect = uiState.conversation?.type == "direct"
+
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(enabled = isDirect && !targetUsername.isNullOrEmpty()) {
+                                    if (!isHeaderExpanded) {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        isHeaderExpanded = true
+                                    } else {
+                                        isHeaderExpanded = false
+                                    }
+                                }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { isHeaderExpanded = false }
-                                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                val targetUsername = uiState.conversation?.username
-                                if (uiState.conversation?.type == "direct") {
+                            if (!isHeaderExpanded) {
+                                if (isDirect) {
                                     InitialsAvatar(
                                         id = targetUsername ?: displayTitle,
                                         avatarUrl = otherUser?.avatarUrl,
-                                        modifier = Modifier
-                                            .size(200.dp)
-                                            .clickable {
-                                                if (targetUsername != null) {
-                                                    onProfileClick(targetUsername)
-                                                }
-                                            },
-                                        fontSize = 80.sp
+                                        modifier = Modifier.size(36.dp),
+                                        fontSize = 16.sp
                                     )
-                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                 }
 
-                                if (otherUser?.bio?.isNotEmpty() == true) {
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                Column {
                                     Text(
-                                        text = "\"${otherUser.bio}\"",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontStyle = FontStyle.Italic,
-                                        textAlign = TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        text = displayTitle,
+                                        style = MaterialTheme.typography.titleMedium
                                     )
-                                }
-
-                                if (otherUser?.phoneNumber?.isNotEmpty() == true) {
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Phone,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                    if (isDirect && otherUser?.bio?.isNotEmpty() == true) {
                                         Text(
-                                            text = otherUser.phoneNumber,
-                                            style = MaterialTheme.typography.bodyMedium
+                                            text = otherUser.bio,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
+                            } else {
+                                Text(
+                                    text = displayTitle,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { /* Voice Call */ }) {
+                                Icon(Icons.Default.Phone, contentDescription = "Voice Call")
+                            }
+                            IconButton(onClick = { /* Video Call */ }) {
+                                Icon(Icons.Default.Videocam, contentDescription = "Video Call")
+                            }
+                            IconButton(onClick = { /* Menu */ }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu")
                             }
                         }
                     }
@@ -626,14 +554,14 @@ fun ChatScreen(
                             ) { index, message ->
                                 val isSelf = message.senderId == currentUserId
 
-                                val isSameSenderAsNext = index < uiState.messages.size - 1 && 
+                                val isSameSenderAsNext = index < uiState.messages.size - 1 &&
                                         uiState.messages[index].senderId == uiState.messages[index + 1].senderId
-                                val isWithinTimeAsNext = index < uiState.messages.size - 1 && 
+                                val isWithinTimeAsNext = index < uiState.messages.size - 1 &&
                                         Math.abs(uiState.messages[index].createdAt - uiState.messages[index + 1].createdAt) < 300_000
 
-                                val isSameSenderAsPrev = index > 0 && 
+                                val isSameSenderAsPrev = index > 0 &&
                                         uiState.messages[index].senderId == uiState.messages[index - 1].senderId
-                                val isWithinTimeAsPrev = index > 0 && 
+                                val isWithinTimeAsPrev = index > 0 &&
                                         Math.abs(uiState.messages[index].createdAt - uiState.messages[index - 1].createdAt) < 300_000
 
                                 val isGroupHeader = !(isSameSenderAsNext && isWithinTimeAsNext)
@@ -648,6 +576,89 @@ fun ChatScreen(
                                     isDark = isDark,
                                     onLongClick = remember(message.id) { { messageToDelete = message } }
                                 )
+                            }
+                        }
+                    }
+
+                    // Expansion overlay
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        AnimatedVisibility(
+                            visible = isHeaderExpanded,
+                            enter = expandVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            ) + fadeIn(animationSpec = tween(500)),
+                            exit = shrinkVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            ) + fadeOut(animationSpec = tween(400))
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                                shadowElevation = 8.dp,
+                                color = MaterialTheme.colorScheme.surface,
+                                border = if (isDark) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { isHeaderExpanded = false }
+                                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    val targetUsername = uiState.conversation?.username
+                                    if (uiState.conversation?.type == "direct") {
+                                        InitialsAvatar(
+                                            id = targetUsername ?: displayTitle,
+                                            avatarUrl = otherUser?.avatarUrl,
+                                            modifier = Modifier
+                                                .size(200.dp)
+                                                .clickable {
+                                                    if (targetUsername != null) {
+                                                        onProfileClick(targetUsername)
+                                                    }
+                                                },
+                                            fontSize = 80.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                    }
+
+                                    if (otherUser?.bio?.isNotEmpty() == true) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "\"${otherUser.bio}\"",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontStyle = FontStyle.Italic,
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    if (otherUser?.phoneNumber?.isNotEmpty() == true) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Phone,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = otherUser.phoneNumber,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -819,19 +830,17 @@ fun ChatScreen(
                                         if (textMessage.text.isEmpty()) {
                                             Text(
                                                 "Enter message...",
-                                                fontSize = 14.sp,
+                                                style = MaterialTheme.typography.bodyLarge,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                         BasicTextField(
                                             value = textMessage,
                                             onValueChange = { onTextMessageChange(it) },
-                                            textStyle = LocalTextStyle.current.copy(
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                fontSize = 15.sp
+                                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                                color = MaterialTheme.colorScheme.onSurface
                                             ),
                                             visualTransformation = markdownTransformation,
-                                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                     }

@@ -49,7 +49,7 @@ import com.whisprtext.app.ui.screen.SettingsScreen
 import com.whisprtext.app.ui.screen.ProfileScreen
 import com.whisprtext.app.ui.screen.PrivacyScreen
 import com.whisprtext.app.ui.screen.AppearanceScreen
-import com.whisprtext.app.ui.theme.WhisrtextTheme
+import com.whisprtext.app.ui.theme.WhisprtextTheme
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
@@ -128,7 +128,9 @@ class MainActivity : ComponentActivity() {
         val chatRepository = app.chatRepository
 
         setContent {
-            WhisrtextTheme {
+            val appearanceSettings by preferencesManager.appearanceSettings.collectAsState(initial = com.whisprtext.app.data.model.AppearanceSettings())
+            
+            WhisprtextTheme(appearanceSettings = appearanceSettings) {
                 var showSplash by remember { mutableStateOf(true) }
                 var isSessionLoaded by remember { mutableStateOf(false) }
                 var sessionToken by remember { mutableStateOf<String?>(null) }

@@ -40,4 +40,11 @@ class AppearanceViewModel(
             preferencesManager.saveAppearanceSettings(current.copy(doodleStyle = style))
         }
     }
+
+    fun updateThemeMode(mode: com.whisprtext.app.data.model.ThemeMode) {
+        viewModelScope.launch {
+            val current = appearanceSettings.value
+            preferencesManager.saveAppearanceSettings(current.copy(themeMode = mode))
+        }
+    }
 }

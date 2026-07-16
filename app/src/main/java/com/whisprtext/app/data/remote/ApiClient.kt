@@ -113,12 +113,14 @@ class ApiClient(
         conversationId: String,
         content: String,
         messageId: String? = null,
-        attachment: AttachmentDto? = null
+        attachment: AttachmentDto? = null,
+        attachments: List<AttachmentDto>? = null
     ): MessageDto {
         val params = mutableMapOf<String, Any>()
         params["content"] = content
         if (messageId != null) params["id"] = messageId
         if (attachment != null) params["attachment"] = attachment
+        if (attachments != null) params["attachments"] = attachments
 
         val json = gson.toJson(params)
         val body = json.toRequestBody(jsonMediaType)

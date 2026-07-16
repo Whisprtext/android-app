@@ -6,20 +6,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -28,10 +28,22 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.ui.component.InitialsAvatar
+import androidx.compose.ui.text.font.FontWeight
+import com.whisprtext.app.ui.theme.DynaPuffFontFamily
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
-import com.whisprtext.app.util.ContactHelper
 
-@OptIn(ExperimentalMaterial3Api::class)
+import com.whisprtext.app.util.ContactHelper
+import kotlinx.coroutines.launch
+
+enum class HomeTab(val title: String, val icon: ImageVector) {
+    Chat("Chat", Icons.Rounded.ChatBubble),
+    Community("Community", Icons.Rounded.Groups),
+    Calls("Calls", Icons.Rounded.Phone),
+    AI("AI", Icons.Rounded.AutoAwesome),
+    Tracking("Tracking", Icons.Rounded.LocationOn)
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationListScreen(
     viewModel: ConversationsViewModel,
@@ -47,134 +59,252 @@ fun ConversationListScreen(
     val isSelectionMode = selectedConversationIds.isNotEmpty()
     var showMenu by remember { mutableStateOf(false) }
 
+    val pagerState = rememberPagerState(pageCount = { HomeTab.entries.size })
+    val scope = rememberCoroutineScope()
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (isSelectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedConversationIds.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = { selectedConversationIds = emptySet() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear Selection")
+            Surface(
+                shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isSelectionMode) {
+                    TopAppBar(
+                        title = { Text("${selectedConversationIds.size} selected") },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        ),
+                        navigationIcon = {
+                            IconButton(onClick = { selectedConversationIds = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear Selection")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = {
+                                viewModel.deleteConversations(selectedConversationIds.toList())
+                                selectedConversationIds = emptySet()
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
+                            }
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete all chats") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.deleteAllConversations()
+                                        selectedConversationIds = emptySet()
+                                    }
+                                )
+                            }
                         }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            viewModel.deleteConversations(selectedConversationIds.toList())
-                            selectedConversationIds = emptySet()
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Selected")
-                        }
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More Options")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Delete all chats") },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.deleteAllConversations()
-                                    selectedConversationIds = emptySet()
+                    )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                when (pagerState.currentPage) {
+                                    0 -> "WhisprText"
+                                    1 -> "Community"
+                                    2 -> "Calls"
+                                    3 -> "Whispr AI"
+                                    4 -> "Tracking"
+                                    else -> "WhisprText"
+                                },
+                                style = MaterialTheme.typography.headlineSmall.copy(
+                                    fontFamily = DynaPuffFontFamily,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        ),
+                        actions = {
+                            if (pagerState.currentPage == 0) {
+                                IconButton(onClick = { viewModel.sync() }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                                 }
+                            }
+                            IconButton(onClick = onProfileClick) {
+                                InitialsAvatar(
+                                    id = uiState.username ?: "Me",
+                                    avatarUrl = uiState.avatarUrl,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            Surface(
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                NavigationBar(
+                    containerColor = Color.Transparent,
+                    modifier = Modifier
+                        .height(120.dp)
+                        .padding(top = 12.dp, bottom = 12.dp)
+                ) {
+                    HomeTab.entries.forEachIndexed { index, tab ->
+                        NavigationBarItem(
+                            selected = pagerState.currentPage == index,
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.title
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.title,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
                             )
-                        }
+                        )
                     }
-                )
-            } else {
-                TopAppBar(
-                    title = { Text("Chats") },
-                    actions = {
-                        IconButton(onClick = { viewModel.sync() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                        IconButton(onClick = onProfileClick) {
-                            InitialsAvatar(
-                                id = uiState.username ?: "Me",
-                                avatarUrl = uiState.avatarUrl,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-                )
+                }
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddContactClick,
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Chat")
+            if (pagerState.currentPage == 0) {
+                FloatingActionButton(
+                    onClick = onAddContactClick,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "New Chat")
+                }
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (uiState.isLoading && uiState.conversations.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else if (uiState.conversations.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No active conversations. Start a new one!", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(uiState.conversations) { conversation ->
-                        val isSelected = selectedConversationIds.contains(conversation.id)
-                        ConversationItem(
-                            conversation = conversation,
-                            contactsMap = contactsMap,
-                            isSelected = isSelected,
-                            isSelectionMode = isSelectionMode,
-                            onLongClick = {
-                                if (!isSelectionMode) {
-                                    selectedConversationIds = setOf(conversation.id)
-                                }
-                            },
-                            onClick = {
-                                if (isSelectionMode) {
-                                    selectedConversationIds = if (isSelected) {
-                                        selectedConversationIds - conversation.id
-                                    } else {
-                                        selectedConversationIds + conversation.id
-                                    }
-                                } else {
-                                    onConversationClick(conversation.id)
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) { page ->
+            when (page) {
+                0 -> {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (uiState.isLoading && uiState.conversations.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (uiState.conversations.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No active conversations. Start a new one!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(uiState.conversations) { conversation ->
+                                    val isSelected = selectedConversationIds.contains(conversation.id)
+                                    ConversationItem(
+                                        conversation = conversation,
+                                        contactsMap = contactsMap,
+                                        isSelected = isSelected,
+                                        isSelectionMode = isSelectionMode,
+                                        onLongClick = {
+                                            if (!isSelectionMode) {
+                                                selectedConversationIds = setOf(conversation.id)
+                                            }
+                                        },
+                                        onClick = {
+                                            if (isSelectionMode) {
+                                                selectedConversationIds = if (isSelected) {
+                                                    selectedConversationIds - conversation.id
+                                                } else {
+                                                    selectedConversationIds + conversation.id
+                                                }
+                                            } else {
+                                                onConversationClick(conversation.id)
+                                            }
+                                        }
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 72.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
                                 }
                             }
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 72.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-            }
+                        }
 
-            if (uiState.error != null) {
-                Snackbar(
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                    action = {
-                        TextButton(onClick = { viewModel.sync() }) {
-                            Text("Retry", color = MaterialTheme.colorScheme.inversePrimary)
+                        if (uiState.error != null) {
+                            Snackbar(
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                                action = {
+                                    TextButton(onClick = { viewModel.sync() }) {
+                                        Text("Retry", color = MaterialTheme.colorScheme.inversePrimary)
+                                    }
+                                }
+                            ) {
+                                Text(uiState.error ?: "")
+                            }
                         }
                     }
-                ) {
-                    Text(uiState.error ?: "")
                 }
+                1 -> PlaceholderTabContent("Community", Icons.Rounded.Groups)
+                2 -> PlaceholderTabContent("Calls", Icons.Rounded.Phone)
+                3 -> PlaceholderTabContent("Whispr AI", Icons.Rounded.AutoAwesome)
+                4 -> PlaceholderTabContent("Tracking", Icons.Rounded.LocationOn)
             }
         }
     }
 }
+
+@Composable
+fun PlaceholderTabContent(title: String, icon: ImageVector) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "$title Screen Coming Soon",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -245,6 +375,9 @@ fun ConversationItem(
                 }
             }
         },
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent
+        ),
         modifier = Modifier
             .background(backgroundColor)
             .combinedClickable(
