@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.whisprtext.app.ui.component.ChatBubble
 import com.whisprtext.app.ui.component.DoodleBorderBackground
 import com.whisprtext.app.ui.theme.AppearancePresets
-import com.whisprtext.app.ui.theme.ChatTheme
+import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.viewmodel.AppearanceViewModel
 import com.whisprtext.app.util.MarkdownParser
 import com.whisprtext.app.data.model.ThemeMode
@@ -108,7 +108,7 @@ fun AppearanceScreen(
             DemoChatView(currentTheme, settings.useDoodles, settings.doodleStyle, isDark)
 
             // Background Color Selection
-            Text("Chat Background", style = MaterialTheme.typography.titleMedium)
+            Text("Theme", style = MaterialTheme.typography.titleMedium)
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp)
@@ -168,7 +168,7 @@ fun AppearanceScreen(
 
 @Composable
 fun DemoChatView(
-    theme: ChatTheme,
+    theme: WhisprTheme,
     useDoodles: Boolean,
     doodleStyle: Int,
     isDark: Boolean
@@ -223,7 +223,7 @@ fun DemoChatView(
 }
 
 @Composable
-fun ThemeOption(theme: ChatTheme, isSelected: Boolean, isDark: Boolean, onClick: () -> Unit) {
+fun ThemeOption(theme: WhisprTheme, isSelected: Boolean, isDark: Boolean, onClick: () -> Unit) {
     val backgroundColor = if (isDark) theme.backgroundColorDark else theme.backgroundColorLight
     val gradientColors = if (isDark) theme.gradientColorsDark else theme.gradientColorsLight
     

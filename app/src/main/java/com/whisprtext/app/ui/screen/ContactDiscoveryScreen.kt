@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
@@ -95,7 +96,8 @@ fun ContactDiscoveryScreen(
                     onValueChange = { usernameQuery = it },
                     label = { Text("Username") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp)
                 )
                 Button(
                     onClick = { viewModel.searchUser(usernameQuery) },

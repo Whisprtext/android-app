@@ -47,7 +47,7 @@ import com.whisprtext.app.ui.component.ChatBubble
 import com.whisprtext.app.ui.component.DoodleBorderBackground
 import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.theme.AppearancePresets
-import com.whisprtext.app.ui.theme.ChatTheme
+import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.util.ContactHelper
 import com.whisprtext.app.util.MarkdownParser
@@ -933,7 +933,7 @@ fun MessageBubble(
     isSelf: Boolean,
     isGroupHeader: Boolean,
     isGroupFooter: Boolean,
-    theme: ChatTheme,
+    theme: WhisprTheme,
     isDark: Boolean,
     onLongClick: () -> Unit
 ) {

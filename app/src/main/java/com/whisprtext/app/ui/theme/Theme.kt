@@ -9,7 +9,13 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowCompat
 
 import androidx.compose.material3.Shapes
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,14 +88,58 @@ fun WhisprtextTheme(
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
 
+    val currentWhisprTheme = AppearancePresets.getTheme(appearanceSettings.presetId)
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> DarkColorScheme.copy(
+            primary = currentWhisprTheme.primaryDark,
+            onPrimary = if (currentWhisprTheme.primaryDark.luminance() > 0.5f) Color.Black else Color.White,
+            primaryContainer = currentWhisprTheme.primaryDark.copy(alpha = 0.2f),
+            onPrimaryContainer = currentWhisprTheme.primaryDark,
+            secondaryContainer = currentWhisprTheme.primaryDark.copy(alpha = 0.15f),
+            onSecondaryContainer = currentWhisprTheme.primaryDark,
+            background = currentWhisprTheme.backgroundColorDark,
+            surface = currentWhisprTheme.surfaceColorDark,
+            onSurface = if (currentWhisprTheme.surfaceColorDark.luminance() > 0.5f) Color.Black else Color.White,
+            onSurfaceVariant = (if (currentWhisprTheme.surfaceColorDark.luminance() > 0.5f) Color.Black else Color.White).copy(alpha = 0.7f),
+            onBackground = if (currentWhisprTheme.backgroundColorDark.luminance() > 0.5f) Color.Black else Color.White
+        )
+        else -> LightColorScheme.copy(
+            primary = currentWhisprTheme.primaryLight,
+            onPrimary = if (currentWhisprTheme.primaryLight.luminance() > 0.5f) Color.Black else Color.White,
+            primaryContainer = currentWhisprTheme.primaryLight.copy(alpha = 0.1f),
+            onPrimaryContainer = currentWhisprTheme.primaryLight,
+            secondaryContainer = currentWhisprTheme.primaryLight.copy(alpha = 0.1f),
+            onSecondaryContainer = currentWhisprTheme.primaryLight,
+            background = currentWhisprTheme.backgroundColorLight,
+            surface = currentWhisprTheme.surfaceColorLight,
+            onSurface = if (currentWhisprTheme.surfaceColorLight.luminance() > 0.5f) Color.Black else Color.White,
+            onSurfaceVariant = (if (currentWhisprTheme.surfaceColorLight.luminance() > 0.5f) Color.Black else Color.White).copy(alpha = 0.7f),
+            onBackground = if (currentWhisprTheme.backgroundColorLight.luminance() > 0.5f) Color.Black else Color.White
+        )
+    }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            val isLight = colorScheme.background.luminance() > 0.5f
+            
+            // Set the system bar colors to match background/surface
+            // Use surface color for nav bar if it's not transparent/gradient-based
+            window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.surface.toArgb()
+            
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = isLight
+                isAppearanceLightNavigationBars = colorScheme.surface.luminance() > 0.5f
+            }
+        }
     }
 
     MaterialTheme(
@@ -99,3 +149,4 @@ fun WhisprtextTheme(
         content = content
     )
 }
+

@@ -73,7 +73,6 @@ fun ConversationListScreen(
             Surface(
                 shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -228,7 +227,7 @@ fun ConversationListScreen(
                                         }
                                     }
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(28.dp),
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -244,7 +243,6 @@ fun ConversationListScreen(
             Surface(
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -275,6 +273,10 @@ fun ConversationListScreen(
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 indicatorColor = MaterialTheme.colorScheme.primaryContainer
                             )
                         )
@@ -286,7 +288,9 @@ fun ConversationListScreen(
             if (pagerState.currentPage == 0) {
                 FloatingActionButton(
                     onClick = onAddContactClick,
-                    shape = MaterialTheme.shapes.medium
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "New Chat")
                 }
@@ -372,10 +376,6 @@ fun ConversationListScreen(
                                                 onConversationClick(conversation.id)
                                             }
                                         }
-                                    )
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(start = 72.dp),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                     )
                                 }
                             }
@@ -475,7 +475,13 @@ fun ConversationItem(
             }
         },
         headlineContent = {
-            Text(displayName)
+            Text(
+                text = displayName,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = DynaPuffFontFamily,
+                    fontWeight = FontWeight.SemiBold
+                )
+            )
         },
         supportingContent = {
             Text(

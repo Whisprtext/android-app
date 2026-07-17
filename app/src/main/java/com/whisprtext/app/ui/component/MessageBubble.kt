@@ -18,7 +18,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.whisprtext.app.ui.theme.ChatTheme
+import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.theme.InterFontFamily
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -29,7 +29,7 @@ fun ChatBubble(
     isSelf: Boolean,
     isGroupHeader: Boolean,
     isGroupFooter: Boolean,
-    theme: ChatTheme,
+    theme: WhisprTheme,
     isDark: Boolean,
     syncStatus: String? = null,
     onLongClick: (() -> Unit)? = null,
