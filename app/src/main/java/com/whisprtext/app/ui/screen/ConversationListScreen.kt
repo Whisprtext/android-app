@@ -130,29 +130,20 @@ fun ConversationListScreen(
                     ) {
                         TopAppBar(
                             title = {
-                                AnimatedContent(
-                                    targetState = pagerState.currentPage,
-                                    transitionSpec = {
-                                        fadeIn(animationSpec = tween(Motion.ShortDuration2)) togetherWith
-                                                fadeOut(animationSpec = tween(Motion.ShortDuration2))
+                                Text(
+                                    text = when (pagerState.currentPage) {
+                                        0 -> "WhisprText"
+                                        1 -> "Community"
+                                        2 -> "Calls"
+                                        3 -> "Whispr AI"
+                                        4 -> "Tracking"
+                                        else -> "WhisprText"
                                     },
-                                    label = "TitleTransition"
-                                ) { page ->
-                                    Text(
-                                        when (page) {
-                                            0 -> "WhisprText"
-                                            1 -> "Community"
-                                            2 -> "Calls"
-                                            3 -> "Whispr AI"
-                                            4 -> "Tracking"
-                                            else -> "WhisprText"
-                                        },
-                                        style = MaterialTheme.typography.headlineSmall.copy(
-                                            fontFamily = DynaPuffFontFamily,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        fontFamily = DynaPuffFontFamily,
+                                        fontWeight = FontWeight.SemiBold
                                     )
-                                }
+                                )
                             },
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = Color.Transparent

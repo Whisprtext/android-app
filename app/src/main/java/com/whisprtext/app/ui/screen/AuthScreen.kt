@@ -71,26 +71,10 @@ fun AuthScreen(
                 modifier = Modifier.glowShader(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
             )
 
-            AnimatedContent(
-                targetState = isLogin,
-                transitionSpec = {
-                    if (targetState) {
-                        (slideInHorizontally(animationSpec = tween(Motion.MediumDuration1)) { -it } + fadeIn())
-                            .togetherWith(slideOutHorizontally(animationSpec = tween(Motion.MediumDuration1)) { it } + fadeOut())
-                    } else {
-                        (slideInHorizontally(animationSpec = tween(Motion.MediumDuration1)) { it } + fadeIn())
-                            .togetherWith(slideOutHorizontally(animationSpec = tween(Motion.MediumDuration1)) { -it } + fadeOut())
-                    }.using(
-                        SizeTransform(clip = false)
-                    )
-                },
-                label = "AuthModeTransition"
-            ) { targetIsLogin ->
-                Text(
-                    text = if (targetIsLogin) "Welcome back" else "Create privacy-focused account",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = if (isLogin) "Welcome back" else "Create privacy-focused account",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 

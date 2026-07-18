@@ -7,7 +7,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
-import com.whisprtext.app.ui.theme.Motion
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -291,32 +290,6 @@ fun ProfileScreen(
                         gradientEnd = gradientColors.second?.let { Color(it) },
                         contentDescription = "Profile photo. Tap to change."
                     )
-                    // Camera badge
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(44.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        shadowElevation = 4.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (isAvatarUploading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.PhotoCamera,
-                                    contentDescription = "Change photo",
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                    }
                 }
 
                 Text(
@@ -353,49 +326,58 @@ fun ProfileScreen(
                     HorizontalDivider()
 
                     val isDisplayNameValid = viewModel.validateDisplayName(displayNameInput)
-                    OutlinedTextField(
-                        value = displayNameInput,
-                        onValueChange = { displayNameInput = it },
-                        label = { Text("Display Name") },
-                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
-                        isError = !isDisplayNameValid && displayNameInput.isNotEmpty(),
-                        supportingText = {
-                            if (!isDisplayNameValid && displayNameInput.isNotEmpty()) {
-                                Text("Only alphabets and spaces are allowed", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = fieldColors
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Display Name", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(
+                            value = displayNameInput,
+                            onValueChange = { displayNameInput = it },
+                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                            isError = !isDisplayNameValid && displayNameInput.isNotEmpty(),
+                            placeholder = { Text("Enter display name") },
+                            supportingText = {
+                                if (!isDisplayNameValid && displayNameInput.isNotEmpty()) {
+                                    Text("Only alphabets and spaces are allowed", color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = fieldColors
+                        )
+                    }
 
                     val isUsernameValid = viewModel.validateUsername(usernameInput)
-                    OutlinedTextField(
-                        value = usernameInput,
-                        onValueChange = { usernameInput = it },
-                        label = { Text("Username") },
-                        leadingIcon = { Icon(Icons.Default.AlternateEmail, contentDescription = null) },
-                        isError = !isUsernameValid && usernameInput.isNotEmpty(),
-                        supportingText = {
-                            if (!isUsernameValid && usernameInput.isNotEmpty()) {
-                                Text("Alphanumeric, dot (.), and underscores (_) only", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = fieldColors
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Username", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(
+                            value = usernameInput,
+                            onValueChange = { usernameInput = it },
+                            leadingIcon = { Icon(Icons.Default.AlternateEmail, contentDescription = null) },
+                            isError = !isUsernameValid && usernameInput.isNotEmpty(),
+                            placeholder = { Text("Enter username") },
+                            supportingText = {
+                                if (!isUsernameValid && usernameInput.isNotEmpty()) {
+                                    Text("Alphanumeric, dot (.), and underscores (_) only", color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = fieldColors
+                        )
+                    }
 
-                    OutlinedTextField(
-                        value = bioInput,
-                        onValueChange = { bioInput = it },
-                        label = { Text("Bio / Status message") },
-                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        maxLines = 3,
-                        colors = fieldColors
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Bio / Status message", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedTextField(
+                            value = bioInput,
+                            onValueChange = { bioInput = it },
+                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                            placeholder = { Text("Tell us about yourself") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = false,
+                            maxLines = 3,
+                            colors = fieldColors
+                        )
+                    }
 
                     Button(
                         onClick = {
