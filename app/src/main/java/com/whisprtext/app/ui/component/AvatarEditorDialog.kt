@@ -350,51 +350,36 @@ fun AvatarManagementSheet(
     onDismiss: () -> Unit,
     isBusy: Boolean = false
 ) {
-    Surface(
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        tonalElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .size(width = 40.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = "Profile photo",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Profile photo",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(12.dp))
 
+        SheetActionRow(
+            label = if (hasCustomAvatar) "Change photo" else "Upload photo",
+            enabled = !isBusy,
+            onClick = onUploadClick
+        )
+        if (hasCustomAvatar) {
             SheetActionRow(
-                label = if (hasCustomAvatar) "Change photo" else "Upload photo",
+                label = "Remove photo",
                 enabled = !isBusy,
-                onClick = onUploadClick
+                destructive = true,
+                onClick = onRemoveClick
             )
-            if (hasCustomAvatar) {
-                SheetActionRow(
-                    label = "Remove photo",
-                    enabled = !isBusy,
-                    destructive = true,
-                    onClick = onRemoveClick
-                )
-            }
-            SheetActionRow(
-                label = "Cancel",
-                enabled = !isBusy,
-                onClick = onDismiss
-            )
-            Spacer(Modifier.height(8.dp))
         }
+        SheetActionRow(
+            label = "Cancel",
+            enabled = !isBusy,
+            onClick = onDismiss
+        )
     }
 }
 
