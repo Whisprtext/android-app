@@ -148,9 +148,11 @@ fun ConversationListScreen(
                                 }
                                 IconButton(onClick = onProfileClick) {
                                     InitialsAvatar(
-                                        id = uiState.username ?: "Me",
+                                        id = uiState.displayName ?: uiState.username ?: "Me",
                                         avatarUrl = uiState.avatarUrl,
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(32.dp),
+                                        gradientStart = uiState.gradientStart?.let { Color(it) },
+                                        gradientEnd = uiState.gradientEnd?.let { Color(it) }
                                     )
                                 }
                             }
@@ -168,9 +170,11 @@ fun ConversationListScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         StatusAvatar(
                                             avatarUrl = uiState.avatarUrl,
-                                            id = uiState.username ?: "Me",
+                                            id = uiState.displayName ?: uiState.username ?: "Me",
                                             showBorder = false,
-                                            showPlusIcon = true
+                                            showPlusIcon = true,
+                                            gradientStart = uiState.gradientStart?.let { Color(it) },
+                                            gradientEnd = uiState.gradientEnd?.let { Color(it) }
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
@@ -199,7 +203,9 @@ fun ConversationListScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         StatusAvatar(
                                             avatarUrl = conversation.avatarUrl,
-                                            id = conversation.id
+                                            id = name,
+                                            gradientStart = conversation.gradientStartColor?.let { Color(it) },
+                                            gradientEnd = conversation.gradientEndColor?.let { Color(it) }
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
@@ -466,11 +472,12 @@ fun ConversationItem(
                     onCheckedChange = { onClick() }
                 )
             } else {
-                val avatarId = conversation.username ?: conversation.title ?: "Chat"
                 InitialsAvatar(
-                    id = avatarId,
+                    id = displayName,
                     avatarUrl = conversation.avatarUrl,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(40.dp),
+                    gradientStart = conversation.gradientStartColor?.let { Color(it) },
+                    gradientEnd = conversation.gradientEndColor?.let { Color(it) }
                 )
             }
         },

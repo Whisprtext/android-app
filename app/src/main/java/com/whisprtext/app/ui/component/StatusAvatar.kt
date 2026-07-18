@@ -11,17 +11,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
 @Composable
@@ -30,7 +32,9 @@ fun StatusAvatar(
     modifier: Modifier = Modifier,
     id: String = "default",
     showBorder: Boolean = true,
-    showPlusIcon: Boolean = false
+    showPlusIcon: Boolean = false,
+    gradientStart: Color? = null,
+    gradientEnd: Color? = null
 ) {
     // Telegram status style border (gradient)
     val statusGradient = Brush.sweepGradient(
@@ -62,29 +66,59 @@ fun StatusAvatar(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        AsyncImage(
-            model = avatarUrl ?: "https://picsum.photos/seed/${id.hashCode()}/200",
-            contentDescription = "Status",
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(radius = 12.dp),
-            contentScale = ContentScale.Crop
-        )
+        if (!avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Status",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(radius = 12.dp),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            val backgroundModifier = if (gradientStart != null && gradientEnd != null) {
+                Modifier.background(Brush.linearGradient(listOf(gradientStart, gradientEnd)))
+            } else {
+                val colors = listOf(
+                    Color(0xFFE57373), Color(0xFFF06292), Color(0xFFBA68C8), Color(0xFF9575CD),
+                    Color(0xFF7986CB), Color(0xFF64B5F6), Color(0xFF4FC3F7), Color(0xFF4DB6AC),
+                    Color(0xFF81C784), Color(0xFFAED581), Color(0xFFFFB74D), Color(0xFFFF8A65)
+                )
+                val colorIndex = Math.abs(id.hashCode()) % colors.size
+                Modifier.background(colors[colorIndex])
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(backgroundModifier),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!showPlusIcon) {
+                    val initials = id.trimStart().filter { it.isLetter() }.take(1).uppercase()
+                    Text(
+                        text = initials,
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = com.whisprtext.app.ui.theme.PoppinsFontFamily
+                    )
+                }
+            }
+        }
 
         if (showPlusIcon) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.2f)),
+                    .background(Color.Black.copy(alpha = 0.3f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add Status",
                     tint = Color.White,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .alpha(0.7f)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }

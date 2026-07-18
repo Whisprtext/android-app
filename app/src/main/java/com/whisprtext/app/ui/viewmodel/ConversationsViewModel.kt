@@ -13,7 +13,10 @@ data class ConversationsUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val username: String? = null,
-    val avatarUrl: String? = null
+    val displayName: String? = null,
+    val avatarUrl: String? = null,
+    val gradientStart: Int? = null,
+    val gradientEnd: Int? = null
 )
 
 class ConversationsViewModel(
@@ -27,11 +30,23 @@ class ConversationsViewModel(
     val uiState: StateFlow<ConversationsUiState> = combine(
         chatRepository.getConversations(),
         preferencesManager.username,
+        preferencesManager.displayName,
         preferencesManager.avatarUrl,
+        preferencesManager.gradientStart,
+        preferencesManager.gradientEnd,
         _isLoading,
         _error
-    ) { conversations, username, avatarUrl, isLoading, error ->
-        ConversationsUiState(conversations, isLoading, error, username, avatarUrl)
+    ) { args ->
+        ConversationsUiState(
+            conversations = args[0] as List<ConversationEntity>,
+            username = args[1] as? String,
+            displayName = args[2] as? String,
+            avatarUrl = args[3] as? String,
+            gradientStart = args[4] as? Int,
+            gradientEnd = args[5] as? Int,
+            isLoading = args[6] as Boolean,
+            error = args[7] as? String
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -48,6 +63,14 @@ class ConversationsViewModel(
             try {
                 val me = chatRepository.getMe()
                 preferencesManager.saveAvatarUrl(me.user.avatarUrl)
+                preferencesManager.saveDisplayName(me.user.displayName)
+                
+                // Also ensure we have gradient colors for ourselves
+                val currentStart = preferencesManager.gradientStart.first()
+                if (currentStart == null) {
+                    val (start, end) = com.whisprtext.app.util.ColorGenerator.generateGradient(me.user.id)
+                    preferencesManager.saveGradientColors(start, end)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }

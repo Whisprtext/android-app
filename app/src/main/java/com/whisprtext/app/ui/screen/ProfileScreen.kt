@@ -33,6 +33,7 @@ fun ProfileScreen(
     isOwnProfile: Boolean = true
 ) {
     val userProfile by viewModel.userProfile.collectAsState()
+    val gradientColors by viewModel.gradientColors.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
@@ -128,12 +129,14 @@ fun ProfileScreen(
                     modifier = Modifier.padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    val avatarLabel = usernameInput.ifBlank { displayNameInput.ifBlank { "?" } }
+                    val avatarLabel = displayNameInput.ifBlank { usernameInput }
                     InitialsAvatar(
                         id = avatarLabel,
                         modifier = Modifier.size(200.dp),
                         avatarUrl = avatarInput,
-                        fontSize = 80.sp
+                        fontSize = 80.sp,
+                        gradientStart = gradientColors.first?.let { Color(it) },
+                        gradientEnd = gradientColors.second?.let { Color(it) }
                     )
                 }
 
@@ -175,12 +178,14 @@ fun ProfileScreen(
                     modifier = Modifier.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    val avatarLabel = usernameInput.ifBlank { displayNameInput.ifBlank { "?" } }
+                    val avatarLabel = displayNameInput.ifBlank { usernameInput }
                     InitialsAvatar(
                         id = avatarLabel,
                         modifier = Modifier.size(180.dp),
                         avatarUrl = avatarInput,
-                        fontSize = 72.sp
+                        fontSize = 72.sp,
+                        gradientStart = gradientColors.first?.let { Color(it) },
+                        gradientEnd = gradientColors.second?.let { Color(it) }
                     )
                 }
 
@@ -207,11 +212,18 @@ fun ProfileScreen(
                     Text("Profile Info", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     HorizontalDivider()
 
+                    val isDisplayNameValid = viewModel.validateDisplayName(displayNameInput)
                     OutlinedTextField(
                         value = displayNameInput,
                         onValueChange = { displayNameInput = it },
                         label = { Text("Display Name") },
                         leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                        isError = !isDisplayNameValid && displayNameInput.isNotEmpty(),
+                        supportingText = {
+                            if (!isDisplayNameValid && displayNameInput.isNotEmpty()) {
+                                Text("Only alphabets and spaces are allowed", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = fieldColors
@@ -264,7 +276,7 @@ fun ProfileScreen(
                                 avatarUrl = avatarInput
                             )
                         },
-                        enabled = !isLoading && isUsernameValid,
+                        enabled = !isLoading && isUsernameValid && isDisplayNameValid,
                         modifier = Modifier.align(Alignment.End),
                         shape = MaterialTheme.shapes.medium
                     ) {

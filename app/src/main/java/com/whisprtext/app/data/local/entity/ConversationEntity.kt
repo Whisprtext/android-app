@@ -14,5 +14,7 @@ data class ConversationEntity(
     val title: String? = null,
     val username: String? = null,
     val phoneNumber: String? = null,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val gradientStartColor: Int? = null,
+    val gradientEndColor: Int? = null
 )

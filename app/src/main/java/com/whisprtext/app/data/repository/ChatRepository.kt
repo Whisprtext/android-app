@@ -14,6 +14,7 @@ import com.whisprtext.app.data.remote.model.MessageDto
 import com.whisprtext.app.util.NetworkMonitor
 import com.whisprtext.app.util.NotificationHelper
 import com.whisprtext.app.util.MediaCrypto
+import com.whisprtext.app.util.ColorGenerator
 import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -533,6 +534,11 @@ class ChatRepository @JvmOverloads constructor(
     suspend fun createConversation(type: String, members: List<String>): ConversationEntity {
         val response = apiClient.createConversation(type, members)
         val existingLocal = conversationDao.getById(response.id)
+        val (start, end) = if (existingLocal?.gradientStartColor != null) {
+            existingLocal.gradientStartColor to existingLocal.gradientEndColor
+        } else {
+            ColorGenerator.generateGradient(response.id)
+        }
         val entity = ConversationEntity(
             id = response.id,
             type = response.type,
@@ -543,7 +549,9 @@ class ChatRepository @JvmOverloads constructor(
             title = response.displayName ?: response.username ?: existingLocal?.title,
             username = response.username ?: existingLocal?.username,
             phoneNumber = response.phoneNumber ?: existingLocal?.phoneNumber,
-            avatarUrl = response.avatarUrl ?: existingLocal?.avatarUrl
+            avatarUrl = response.avatarUrl ?: existingLocal?.avatarUrl,
+            gradientStartColor = start,
+            gradientEndColor = end
         )
         conversationDao.insert(entity)
         return entity
@@ -552,6 +560,11 @@ class ChatRepository @JvmOverloads constructor(
     suspend fun createDirectConversation(targetUserId: String?, username: String?, avatarUrl: String? = null): ConversationEntity {
         val response = apiClient.createDirectConversation(targetUserId, username)
         val existingLocal = conversationDao.getById(response.id)
+        val (start, end) = if (existingLocal?.gradientStartColor != null) {
+            existingLocal.gradientStartColor to existingLocal.gradientEndColor
+        } else {
+            ColorGenerator.generateGradient(response.id)
+        }
         val entity = ConversationEntity(
             id = response.id,
             type = response.type,
@@ -562,7 +575,9 @@ class ChatRepository @JvmOverloads constructor(
             title = response.displayName ?: response.username ?: existingLocal?.title ?: targetUserId ?: username,
             username = response.username ?: existingLocal?.username,
             phoneNumber = response.phoneNumber ?: existingLocal?.phoneNumber,
-            avatarUrl = response.avatarUrl ?: avatarUrl ?: existingLocal?.avatarUrl
+            avatarUrl = response.avatarUrl ?: avatarUrl ?: existingLocal?.avatarUrl,
+            gradientStartColor = start,
+            gradientEndColor = end
         )
         conversationDao.insert(entity)
         return entity
@@ -593,6 +608,7 @@ class ChatRepository @JvmOverloads constructor(
 
     // Mapper utilities
     private fun ConversationSummaryDto.toEntity(): ConversationEntity {
+        val (start, end) = ColorGenerator.generateGradient(id)
         return ConversationEntity(
             id = id,
             type = type,
@@ -603,7 +619,9 @@ class ChatRepository @JvmOverloads constructor(
             title = displayName ?: username,
             username = username,
             phoneNumber = phoneNumber,
-            avatarUrl = avatarUrl
+            avatarUrl = avatarUrl,
+            gradientStartColor = start,
+            gradientEndColor = end
         )
     }
 

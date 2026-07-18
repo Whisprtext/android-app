@@ -469,10 +469,12 @@ fun ChatScreen(
                             if (!isHeaderExpanded) {
                                 if (isDirect) {
                                     InitialsAvatar(
-                                        id = targetUsername ?: displayTitle,
+                                        id = displayTitle,
                                         avatarUrl = otherUser?.avatarUrl,
                                         modifier = Modifier.size(36.dp),
-                                        fontSize = 16.sp
+                                        fontSize = 16.sp,
+                                        gradientStart = uiState.conversation?.gradientStartColor?.let { Color(it) },
+                                        gradientEnd = uiState.conversation?.gradientEndColor?.let { Color(it) }
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                 }
@@ -541,6 +543,43 @@ fun ChatScreen(
                             CircularProgressIndicator()
                         }
                     } else {
+                        val showTimestampIndices = remember(uiState.messages) {
+                            // uiState.messages is ORDER BY createdAt DESC (newest first)
+                            // To process chronologically, we reverse it
+                            val chronological = uiState.messages.reversed()
+                            val result = mutableSetOf<String>()
+                            if (chronological.isEmpty()) return@remember result
+
+                            var currentBlockSender = chronological[0].senderId
+                            var lastMessageTimeInBlock = chronological[0].createdAt
+                            var currentBlockCount = 0
+
+                            for (i in chronological.indices) {
+                                val msg = chronological[i]
+                                val timeGap = msg.createdAt - lastMessageTimeInBlock
+
+                                val senderChanged = msg.senderId != currentBlockSender
+                                val timeGapExceeded = i > 0 && timeGap >= 300_000 // 5 minutes gap from PREVIOUS message in chronological order
+                                val countExceeded = currentBlockCount >= 10
+
+                                if (senderChanged || timeGapExceeded || countExceeded) {
+                                    // End previous block: the message BEFORE this one was the last in its block
+                                    if (i > 0) {
+                                        result.add(chronological[i - 1].id)
+                                    }
+                                    currentBlockSender = msg.senderId
+                                    lastMessageTimeInBlock = msg.createdAt
+                                    currentBlockCount = 1
+                                } else {
+                                    currentBlockCount++
+                                    lastMessageTimeInBlock = msg.createdAt
+                                }
+                            }
+                            // Always add the last message of the entire list as the end of the final block
+                            result.add(chronological.last().id)
+                            result
+                        }
+
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(vertical = 12.dp),
@@ -574,6 +613,7 @@ fun ChatScreen(
                                     isGroupFooter = isGroupFooter,
                                     theme = theme,
                                     isDark = isDark,
+                                    showTimestamp = showTimestampIndices.contains(message.id),
                                     onLongClick = remember(message.id) { { messageToDelete = message } }
                                 )
                             }
@@ -614,7 +654,7 @@ fun ChatScreen(
                                     val targetUsername = uiState.conversation?.username
                                     if (uiState.conversation?.type == "direct") {
                                         InitialsAvatar(
-                                            id = targetUsername ?: displayTitle,
+                                            id = displayTitle,
                                             avatarUrl = otherUser?.avatarUrl,
                                             modifier = Modifier
                                                 .size(200.dp)
@@ -623,7 +663,9 @@ fun ChatScreen(
                                                         onProfileClick(targetUsername)
                                                     }
                                                 },
-                                            fontSize = 80.sp
+                                            fontSize = 80.sp,
+                                            gradientStart = uiState.conversation?.gradientStartColor?.let { Color(it) },
+                                            gradientEnd = uiState.conversation?.gradientEndColor?.let { Color(it) }
                                         )
                                         Spacer(modifier = Modifier.height(16.dp))
                                     }
@@ -935,6 +977,7 @@ fun MessageBubble(
     isGroupFooter: Boolean,
     theme: WhisprTheme,
     isDark: Boolean,
+    showTimestamp: Boolean = true,
     onLongClick: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1053,6 +1096,7 @@ fun MessageBubble(
         theme = theme,
         isDark = isDark,
         syncStatus = message.syncStatus,
+        showTimestamp = showTimestamp,
         onLongClick = onLongClick,
         mediaContent = mediaContent
     )

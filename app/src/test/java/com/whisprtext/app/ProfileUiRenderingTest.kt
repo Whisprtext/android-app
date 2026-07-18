@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.remote.ApiClient
+import com.whisprtext.app.data.repository.ChatRepository
 import com.whisprtext.app.data.remote.model.MeResponse
 import com.whisprtext.app.data.remote.model.UserDto
 import com.whisprtext.app.ui.screen.ProfileScreen
@@ -35,6 +36,7 @@ class ProfileUiRenderingTest {
     private val testDispatcher = StandardTestDispatcher()
     private val apiClient: ApiClient = mock()
     private val preferencesManager: PreferencesManager = mock()
+    private val chatRepository: ChatRepository = mock()
     private lateinit var viewModel: ProfileViewModel
 
     private val testUser = UserDto(
@@ -54,8 +56,10 @@ class ProfileUiRenderingTest {
         Dispatchers.setMain(testDispatcher)
         whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-123"))
         whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
+        whenever(preferencesManager.gradientStart).thenReturn(kotlinx.coroutines.flow.flowOf(null))
+        whenever(preferencesManager.gradientEnd).thenReturn(kotlinx.coroutines.flow.flowOf(null))
         whenever(apiClient.getMe()).thenReturn(MeResponse(testUser, mock()))
-        viewModel = ProfileViewModel(apiClient, preferencesManager)
+        viewModel = ProfileViewModel(apiClient, preferencesManager, chatRepository)
     }
 
     @After
