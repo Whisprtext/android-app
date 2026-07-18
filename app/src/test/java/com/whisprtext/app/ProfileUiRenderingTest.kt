@@ -58,7 +58,7 @@ class ProfileUiRenderingTest {
         whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
         whenever(preferencesManager.gradientStart).thenReturn(kotlinx.coroutines.flow.flowOf(null))
         whenever(preferencesManager.gradientEnd).thenReturn(kotlinx.coroutines.flow.flowOf(null))
-        whenever(apiClient.getMe()).thenReturn(MeResponse(testUser, mock()))
+        whenever(chatRepository.getCachedSelfProfile()).thenReturn(testUser)
         viewModel = ProfileViewModel(apiClient, preferencesManager, chatRepository)
     }
 
@@ -86,5 +86,7 @@ class ProfileUiRenderingTest {
         composeTestRule.onNodeWithText("alexmercer").assertExists()
         composeTestRule.onNodeWithText("Bio Status Text Here").assertExists()
         composeTestRule.onNodeWithText("Who can see my phone number").assertExists()
+        // URL field removed; avatar is managed via photo picker/editor.
+        composeTestRule.onNodeWithText("Tap to change profile photo").assertExists()
     }
 }

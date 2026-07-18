@@ -382,7 +382,13 @@ class MainActivity : ComponentActivity() {
                                 ) { backStackEntry ->
                                     val username = backStackEntry.arguments?.getString("username")
                                     val profileViewModel = viewModelFactory {
-                                        ProfileViewModel(apiClient, preferencesManager, chatRepository, username)
+                                        ProfileViewModel(
+                                            apiClient,
+                                            preferencesManager,
+                                            chatRepository,
+                                            username,
+                                            applicationContext
+                                        )
                                     }
                                     ProfileScreen(
                                         viewModel = profileViewModel,
@@ -404,7 +410,12 @@ class MainActivity : ComponentActivity() {
 
                                 composable(Screen.Privacy.route) {
                                     val profileViewModel = viewModelFactory {
-                                        ProfileViewModel(apiClient, preferencesManager, chatRepository)
+                                        ProfileViewModel(
+                                            apiClient,
+                                            preferencesManager,
+                                            chatRepository,
+                                            appContext = applicationContext
+                                        )
                                     }
                                     PrivacyScreen(
                                         viewModel = profileViewModel,

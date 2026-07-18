@@ -34,7 +34,24 @@ class AuthViewModel(
                 Log.d("AuthViewModel", "login() making API call with device: $devName")
                 val response = apiClient.login(username, passwordHash, devName)
                 Log.d("AuthViewModel", "login() API call success: token=${response.sessionToken}")
-                preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username, response.user.avatarUrl)
+                preferencesManager.saveSession(
+                    response.sessionToken,
+                    response.user.id,
+                    response.user.username,
+                    response.user.displayName,
+                    response.user.avatarUrl
+                )
+                preferencesManager.saveOwnProfile(
+                    userId = response.user.id,
+                    username = response.user.username,
+                    displayName = response.user.displayName,
+                    bio = response.user.bio,
+                    avatarUrl = response.user.avatarUrl,
+                    phoneNumber = response.user.phoneNumber,
+                    phoneNumberVisibility = response.user.phoneNumberVisibility,
+                    discoverableByUsername = response.user.discoverableByUsername,
+                    discoverableByPhone = response.user.discoverableByPhone
+                )
                 Log.d("AuthViewModel", "login() session saved successfully")
                 _authState.value = AuthState.Success
             } catch (e: Exception) {
@@ -53,7 +70,24 @@ class AuthViewModel(
                 Log.d("AuthViewModel", "signup() making API call with device: $devName")
                 val response = apiClient.signup(username, passwordHash, devName)
                 Log.d("AuthViewModel", "signup() API call success: token=${response.sessionToken}")
-                preferencesManager.saveSession(response.sessionToken, response.user.id, response.user.username, response.user.avatarUrl)
+                preferencesManager.saveSession(
+                    response.sessionToken,
+                    response.user.id,
+                    response.user.username,
+                    response.user.displayName,
+                    response.user.avatarUrl
+                )
+                preferencesManager.saveOwnProfile(
+                    userId = response.user.id,
+                    username = response.user.username,
+                    displayName = response.user.displayName,
+                    bio = response.user.bio,
+                    avatarUrl = response.user.avatarUrl,
+                    phoneNumber = response.user.phoneNumber,
+                    phoneNumberVisibility = response.user.phoneNumberVisibility,
+                    discoverableByUsername = response.user.discoverableByUsername,
+                    discoverableByPhone = response.user.discoverableByPhone
+                )
                 Log.d("AuthViewModel", "signup() session saved successfully")
                 _authState.value = AuthState.Success
             } catch (e: Exception) {

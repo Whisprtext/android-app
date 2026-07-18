@@ -2,7 +2,7 @@ package com.whisprtext.app
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import com.whisprtext.app.ui.screen.InitialsAvatar
+import com.whisprtext.app.ui.component.InitialsAvatar
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

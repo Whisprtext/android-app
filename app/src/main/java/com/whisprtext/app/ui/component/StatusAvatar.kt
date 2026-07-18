@@ -13,6 +13,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -20,11 +25,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.whisprtext.app.WhisprTextApp
+import com.whisprtext.app.util.AvatarUrlResolver
 
 @Composable
 fun StatusAvatar(
@@ -49,6 +58,24 @@ fun StatusAvatar(
         )
     )
 
+    val context = LocalContext.current
+    val apiClient = remember(context) {
+        (context.applicationContext as? WhisprTextApp)?.apiClient
+    }
+    var resolvedUrl by remember(avatarUrl) { mutableStateOf<String?>(null) }
+    var isError by remember(avatarUrl) { mutableStateOf(false) }
+
+    LaunchedEffect(avatarUrl, apiClient) {
+        isError = false
+        resolvedUrl = null
+        if (AvatarUrlResolver.isRemoteAvatarRef(avatarUrl) && apiClient != null) {
+            resolvedUrl = AvatarUrlResolver.resolve(apiClient, avatarUrl)
+            if (resolvedUrl == null && AvatarUrlResolver.isStorageRef(avatarUrl)) {
+                isError = true
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .size(56.dp)
@@ -66,14 +93,19 @@ fun StatusAvatar(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        if (!avatarUrl.isNullOrBlank()) {
+        if (!resolvedUrl.isNullOrBlank() && !isError) {
             AsyncImage(
-                model = avatarUrl,
+                model = ImageRequest.Builder(context)
+                    .data(resolvedUrl)
+                    .memoryCacheKey(avatarUrl)
+                    .diskCacheKey(avatarUrl)
+                    .build(),
                 contentDescription = "Status",
                 modifier = Modifier
                     .fillMaxSize()
                     .blur(radius = 12.dp),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                onError = { isError = true }
             )
         } else {
             val backgroundModifier = if (gradientStart != null && gradientEnd != null) {

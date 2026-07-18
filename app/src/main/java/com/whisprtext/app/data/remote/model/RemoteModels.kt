@@ -35,7 +35,26 @@ data class UpdateProfileRequest(
     val username: String,
     @SerializedName("display_name") val displayName: String,
     val bio: String,
-    @SerializedName("avatar_url") val avatarUrl: String
+    // avatar_url is ignored by the backend; use dedicated avatar endpoints instead.
+    @SerializedName("avatar_url") val avatarUrl: String = ""
+)
+
+data class AvatarUploadInitRequest(
+    @SerializedName("mime_type") val mimeType: String,
+    @SerializedName("size_bytes") val sizeBytes: Long
+)
+
+data class AvatarUploadInitResponse(
+    @SerializedName("upload_url") val uploadUrl: String,
+    @SerializedName("file_url") val fileUrl: String,
+    @SerializedName("file_id") val fileId: String
+)
+
+data class SetAvatarRequest(
+    @SerializedName("file_id") val fileId: String,
+    @SerializedName("file_url") val fileUrl: String,
+    @SerializedName("mime_type") val mimeType: String,
+    @SerializedName("size_bytes") val sizeBytes: Long
 )
 data class MeResponse(
     val user: UserDto,

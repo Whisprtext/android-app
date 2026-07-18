@@ -24,6 +24,11 @@ class PreferencesManager(private val context: Context) {
         private val KEY_USERNAME = stringPreferencesKey("username")
         private val KEY_DISPLAY_NAME = stringPreferencesKey("display_name")
         private val KEY_AVATAR_URL = stringPreferencesKey("avatar_url")
+        private val KEY_BIO = stringPreferencesKey("bio")
+        private val KEY_PHONE_NUMBER = stringPreferencesKey("phone_number")
+        private val KEY_PHONE_VISIBILITY = stringPreferencesKey("phone_number_visibility")
+        private val KEY_DISCOVERABLE_USERNAME = stringPreferencesKey("discoverable_by_username")
+        private val KEY_DISCOVERABLE_PHONE = stringPreferencesKey("discoverable_by_phone")
         private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
         private val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
         private val KEY_PUSH_TOKEN = stringPreferencesKey("push_token")
@@ -89,6 +94,26 @@ class PreferencesManager(private val context: Context) {
         preferences[KEY_AVATAR_URL]
     }
 
+    val bio: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_BIO]
+    }
+
+    val phoneNumber: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PHONE_NUMBER]
+    }
+
+    val phoneNumberVisibility: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PHONE_VISIBILITY]
+    }
+
+    val discoverableByUsername: Flow<Boolean?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_DISCOVERABLE_USERNAME]?.toBooleanStrictOrNull()
+    }
+
+    val discoverableByPhone: Flow<Boolean?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_DISCOVERABLE_PHONE]?.toBooleanStrictOrNull()
+    }
+
     val lastSyncTime: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_LAST_SYNC_TIME]
     }
@@ -146,9 +171,85 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun saveAvatarUrl(avatarUrl: String) {
         context.dataStore.edit { preferences ->
-            preferences[KEY_AVATAR_URL] = avatarUrl
+            if (avatarUrl.isBlank()) {
+                preferences.remove(KEY_AVATAR_URL)
+            } else {
+                preferences[KEY_AVATAR_URL] = avatarUrl
+            }
         }
     }
+
+    suspend fun clearAvatarUrl() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(KEY_AVATAR_URL)
+        }
+    }
+
+    /**
+     * Persist the signed-in user's full profile for instant local loads.
+     * Call after any successful profile/avatar/privacy mutation.
+     */
+    suspend fun saveOwnProfile(
+        userId: String? = null,
+        username: String,
+        displayName: String,
+        bio: String,
+        avatarUrl: String,
+        phoneNumber: String? = null,
+        phoneNumberVisibility: String = "everyone",
+        discoverableByUsername: Boolean = true,
+        discoverableByPhone: Boolean = true
+    ) {
+        context.dataStore.edit { preferences ->
+            if (userId != null) preferences[KEY_USER_ID] = userId
+            preferences[KEY_USERNAME] = username
+            preferences[KEY_DISPLAY_NAME] = displayName
+            preferences[KEY_BIO] = bio
+            if (avatarUrl.isBlank()) {
+                preferences.remove(KEY_AVATAR_URL)
+            } else {
+                preferences[KEY_AVATAR_URL] = avatarUrl
+            }
+            if (phoneNumber.isNullOrBlank()) {
+                preferences.remove(KEY_PHONE_NUMBER)
+            } else {
+                preferences[KEY_PHONE_NUMBER] = phoneNumber
+            }
+            preferences[KEY_PHONE_VISIBILITY] = phoneNumberVisibility
+            preferences[KEY_DISCOVERABLE_USERNAME] = discoverableByUsername.toString()
+            preferences[KEY_DISCOVERABLE_PHONE] = discoverableByPhone.toString()
+        }
+    }
+
+    /** Rebuild a UserDto-like snapshot from cached preference fields (null if no username). */
+    suspend fun getOwnProfileSnapshot(): OwnProfileSnapshot? {
+        val prefs = context.dataStore.data.first()
+        val username = prefs[KEY_USERNAME] ?: return null
+        val userId = prefs[KEY_USER_ID] ?: return null
+        return OwnProfileSnapshot(
+            id = userId,
+            username = username,
+            displayName = prefs[KEY_DISPLAY_NAME] ?: "",
+            bio = prefs[KEY_BIO] ?: "",
+            avatarUrl = prefs[KEY_AVATAR_URL] ?: "",
+            phoneNumber = prefs[KEY_PHONE_NUMBER],
+            phoneNumberVisibility = prefs[KEY_PHONE_VISIBILITY] ?: "everyone",
+            discoverableByUsername = prefs[KEY_DISCOVERABLE_USERNAME]?.toBooleanStrictOrNull() ?: true,
+            discoverableByPhone = prefs[KEY_DISCOVERABLE_PHONE]?.toBooleanStrictOrNull() ?: true
+        )
+    }
+
+    data class OwnProfileSnapshot(
+        val id: String,
+        val username: String,
+        val displayName: String,
+        val bio: String,
+        val avatarUrl: String,
+        val phoneNumber: String?,
+        val phoneNumberVisibility: String,
+        val discoverableByUsername: Boolean,
+        val discoverableByPhone: Boolean
+    )
 
     suspend fun saveLastSyncTime(time: String) {
         context.dataStore.edit { preferences ->
@@ -163,6 +264,11 @@ class PreferencesManager(private val context: Context) {
             preferences.remove(KEY_USERNAME)
             preferences.remove(KEY_DISPLAY_NAME)
             preferences.remove(KEY_AVATAR_URL)
+            preferences.remove(KEY_BIO)
+            preferences.remove(KEY_PHONE_NUMBER)
+            preferences.remove(KEY_PHONE_VISIBILITY)
+            preferences.remove(KEY_DISCOVERABLE_USERNAME)
+            preferences.remove(KEY_DISCOVERABLE_PHONE)
             preferences.remove(KEY_LAST_SYNC_TIME)
         }
     }

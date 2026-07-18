@@ -6,21 +6,25 @@ import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.local.entity.PendingReceiptEntity
+import com.whisprtext.app.data.local.entity.UserProfileEntity
 import com.whisprtext.app.data.remote.ApiClient
 import com.whisprtext.app.data.remote.WebSocketEvent
 import com.whisprtext.app.data.remote.WebSocketManager
 import com.whisprtext.app.data.remote.model.ConversationSummaryDto
 import com.whisprtext.app.data.remote.model.MessageDto
+import com.whisprtext.app.data.remote.model.UserDto
 import com.whisprtext.app.util.NetworkMonitor
 import com.whisprtext.app.util.NotificationHelper
 import com.whisprtext.app.util.MediaCrypto
 import com.whisprtext.app.util.ColorGenerator
+import com.whisprtext.app.util.AvatarUrlResolver
 import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.UUID
@@ -38,6 +42,7 @@ class ChatRepository @JvmOverloads constructor(
     private val conversationDao = database.conversationDao()
     private val messageDao = database.messageDao()
     private val pendingReceiptDao = database.pendingReceiptDao()
+    private val userProfileDao = database.userProfileDao()
     private val scope = CoroutineScope(ioDispatcher)
     private var cachedUserId: String? = null
 
@@ -194,8 +199,24 @@ class ChatRepository @JvmOverloads constructor(
             val remoteSummaries = apiClient.getConversations()
             if (remoteSummaries.isEmpty()) return
 
-            val entities = remoteSummaries.map { it.toEntity() }
+            val entities = remoteSummaries.map { summary ->
+                val base = summary.toEntity()
+                val existingLocal = conversationDao.getById(summary.id)
+                // Prefer richer locally cached avatar if server returns empty.
+                val cachedProfile = summary.username?.let { userProfileDao.getByUsername(it) }
+                base.copy(
+                    avatarUrl = summary.avatarUrl
+                        ?: existingLocal?.avatarUrl
+                        ?: cachedProfile?.avatarUrl,
+                    gradientStartColor = existingLocal?.gradientStartColor ?: base.gradientStartColor,
+                    gradientEndColor = existingLocal?.gradientEndColor ?: base.gradientEndColor,
+                    unreadCount = existingLocal?.unreadCount ?: base.unreadCount,
+                    lastMessageText = base.lastMessageText ?: existingLocal?.lastMessageText,
+                    lastMessageTime = base.lastMessageTime ?: existingLocal?.lastMessageTime
+                )
+            }
             conversationDao.insertAll(entities)
+            seedProfilesFromConversations(remoteSummaries)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -593,23 +614,177 @@ class ChatRepository @JvmOverloads constructor(
         return conversationDao.getDirectConversationByContact(username, phoneNumber)
     }
 
-    suspend fun searchUserByUsername(username: String) = apiClient.searchUserByUsername(username)
+    // ── Profile local cache ──────────────────────────────────────────────────
+
+    fun observeProfileByUsername(username: String): Flow<UserDto?> =
+        userProfileDao.observeByUsername(username).map { it?.toUserDto() }
+
+    fun observeSelfProfile(): Flow<UserDto?> =
+        userProfileDao.observeSelf().map { it?.toUserDto() }
+
+    suspend fun getCachedProfileByUsername(username: String): UserDto? =
+        userProfileDao.getByUsername(username)?.toUserDto()
+
+    suspend fun getCachedProfileById(userId: String): UserDto? =
+        userProfileDao.getById(userId)?.toUserDto()
+
+    suspend fun getCachedSelfProfile(): UserDto? {
+        userProfileDao.getSelf()?.toUserDto()?.let { return it }
+        val snap = preferencesManager.getOwnProfileSnapshot() ?: return null
+        return UserDto(
+            id = snap.id,
+            username = snap.username,
+            phoneNumber = snap.phoneNumber,
+            discoverableByUsername = snap.discoverableByUsername,
+            discoverableByPhone = snap.discoverableByPhone,
+            displayName = snap.displayName,
+            bio = snap.bio,
+            avatarUrl = snap.avatarUrl,
+            phoneNumberVisibility = snap.phoneNumberVisibility
+        )
+    }
+
+    /**
+     * Persist a user profile locally and push avatar/name into matching direct conversations
+     * so avatars update everywhere in the app immediately.
+     */
+    suspend fun cacheUserProfile(user: UserDto, isSelf: Boolean = false, previousUsername: String? = null) {
+        val previous = if (previousUsername != null) {
+            userProfileDao.getByUsername(previousUsername)
+        } else {
+            userProfileDao.getById(user.id) ?: userProfileDao.getByUsername(user.username)
+        }
+        val previousAvatar = previous?.avatarUrl
+        val matchUsername = previousUsername ?: previous?.username ?: user.username
+
+        // Drop seed rows (pending_*) or username-collision rows so REPLACE on real id works cleanly.
+        val byUsername = userProfileDao.getByUsername(user.username)
+        if (byUsername != null && byUsername.id != user.id) {
+            userProfileDao.deleteById(byUsername.id)
+        }
+        if (previous != null && previous.id != user.id && previous.username != user.username) {
+            userProfileDao.deleteById(previous.id)
+        }
+
+        userProfileDao.upsert(UserProfileEntity.fromUserDto(user, isSelf = isSelf))
+
+        // Keep conversation list / chat headers in sync with the latest profile photo & name.
+        conversationDao.updateDirectConversationProfile(
+            matchUsername = matchUsername,
+            username = user.username,
+            displayName = user.displayName.ifBlank { user.username },
+            avatarUrl = user.avatarUrl.ifBlank { null },
+            phoneNumber = user.phoneNumber
+        )
+
+        if (isSelf) {
+            preferencesManager.saveOwnProfile(
+                userId = user.id,
+                username = user.username,
+                displayName = user.displayName,
+                bio = user.bio,
+                avatarUrl = user.avatarUrl,
+                phoneNumber = user.phoneNumber,
+                phoneNumberVisibility = user.phoneNumberVisibility,
+                discoverableByUsername = user.discoverableByUsername,
+                discoverableByPhone = user.discoverableByPhone
+            )
+        }
+
+        // Bust image loader cache when the avatar reference changes.
+        if (!previousAvatar.isNullOrBlank() && previousAvatar != user.avatarUrl) {
+            AvatarUrlResolver.invalidate(previousAvatar)
+            context?.let { AvatarUrlResolver.evictFromImageLoader(it, previousAvatar) }
+        }
+        if (user.avatarUrl.isNotBlank()) {
+            AvatarUrlResolver.invalidate(user.avatarUrl)
+            context?.let { AvatarUrlResolver.evictFromImageLoader(it, user.avatarUrl) }
+        }
+    }
+
+    suspend fun cacheUserProfiles(users: List<UserDto>, isSelf: Boolean = false) {
+        users.forEach { cacheUserProfile(it, isSelf = isSelf) }
+    }
+
+    /** Network search + local cache write. */
+    suspend fun searchUserByUsername(username: String, cacheResult: Boolean = true): UserDto {
+        val user = apiClient.searchUserByUsername(username)
+        if (cacheResult) {
+            cacheUserProfile(user, isSelf = false)
+        }
+        return user
+    }
+
+    /**
+     * Refresh a contact profile from the network and update local cache + conversations.
+     * Used when opening another user's profile screen.
+     */
+    suspend fun refreshContactProfile(username: String): UserDto {
+        val previous = userProfileDao.getByUsername(username)
+        val user = apiClient.searchUserByUsername(username)
+        cacheUserProfile(user, isSelf = false, previousUsername = previous?.username ?: username)
+        return user
+    }
+
     suspend fun getMe() = apiClient.getMe()
-    suspend fun lookupUsersByPhone(phoneNumbers: List<String>) = apiClient.lookupUsersByPhone(phoneNumbers)
+
+    /** Fetch own profile from network and persist locally. Prefer [getCachedSelfProfile] for UI loads. */
+    suspend fun refreshOwnProfileFromNetwork(): UserDto {
+        val me = apiClient.getMe()
+        cacheUserProfile(me.user, isSelf = true)
+        return me.user
+    }
+
+    suspend fun lookupUsersByPhone(phoneNumbers: List<String>): List<UserDto> {
+        val users = apiClient.lookupUsersByPhone(phoneNumbers)
+        cacheUserProfiles(users, isSelf = false)
+        return users
+    }
+
     suspend fun updateSettings(
         phoneNumber: String?,
         discoverableByUsername: Boolean,
         discoverableByPhone: Boolean,
         displayName: String? = null,
         phoneNumberVisibility: String? = null
-    ) = apiClient.updateSettings(phoneNumber, discoverableByUsername, discoverableByPhone, displayName, phoneNumberVisibility)
+    ): UserDto {
+        val updated = apiClient.updateSettings(
+            phoneNumber,
+            discoverableByUsername,
+            discoverableByPhone,
+            displayName,
+            phoneNumberVisibility
+        )
+        cacheUserProfile(updated, isSelf = true)
+        return updated
+    }
 
     suspend fun updateProfile(
         username: String,
         displayName: String,
         bio: String,
-        avatarUrl: String
-    ) = apiClient.updateProfile(username, displayName, bio, avatarUrl)
+        avatarUrl: String = ""
+    ): UserDto {
+        val previousUsername = preferencesManager.username.first()
+        val updated = apiClient.updateProfile(username, displayName, bio, avatarUrl)
+        cacheUserProfile(updated, isSelf = true, previousUsername = previousUsername)
+        return updated
+    }
+
+    suspend fun setAvatar(fileId: String, fileUrl: String, mimeType: String, sizeBytes: Long): UserDto {
+        val updated = apiClient.setAvatar(fileId, fileUrl, mimeType, sizeBytes)
+        cacheUserProfile(updated, isSelf = true)
+        return updated
+    }
+
+    suspend fun removeAvatar(): UserDto {
+        val updated = apiClient.removeAvatar()
+        cacheUserProfile(updated, isSelf = true)
+        return updated
+    }
+
+    suspend fun initAvatarUpload(mimeType: String, sizeBytes: Long) =
+        apiClient.initAvatarUpload(mimeType, sizeBytes)
 
     // Mapper utilities
     private fun ConversationSummaryDto.toEntity(): ConversationEntity {
@@ -628,6 +803,42 @@ class ChatRepository @JvmOverloads constructor(
             gradientStartColor = start,
             gradientEndColor = end
         )
+    }
+
+    /**
+     * When conversation summaries arrive from the server, seed lightweight contact profiles
+     * so avatars/names are available offline without opening each profile.
+     */
+    suspend fun seedProfilesFromConversations(conversations: List<ConversationSummaryDto>) {
+        for (conv in conversations) {
+            val uname = conv.username ?: continue
+            if (uname.isBlank()) continue
+            val existing = userProfileDao.getByUsername(uname)
+            val newAvatar = conv.avatarUrl.orEmpty()
+            if (existing == null) {
+                userProfileDao.upsert(
+                    UserProfileEntity(
+                        // Real server user id is filled on next profile refresh.
+                        id = "pending_$uname",
+                        username = uname,
+                        displayName = conv.displayName ?: uname,
+                        bio = "",
+                        avatarUrl = newAvatar,
+                        phoneNumber = conv.phoneNumber,
+                        isSelf = false
+                    )
+                )
+            } else if (newAvatar.isNotBlank() && newAvatar != existing.avatarUrl) {
+                userProfileDao.upsert(
+                    existing.copy(
+                        displayName = conv.displayName?.takeIf { it.isNotBlank() } ?: existing.displayName,
+                        avatarUrl = newAvatar,
+                        phoneNumber = conv.phoneNumber ?: existing.phoneNumber,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
     }
 
     private fun MessageDto.toEntity(status: String): MessageEntity {

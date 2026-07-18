@@ -3,6 +3,7 @@ package com.whisprtext.app
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.repository.ChatRepository
+import com.whisprtext.app.data.repository.ContactRepository
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flowOf
@@ -22,6 +23,7 @@ class ChatViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val chatRepository: ChatRepository = mock()
+    private val contactRepository: ContactRepository = mock()
     private val preferencesManager: PreferencesManager = mock()
     private lateinit var viewModel: ChatViewModel
 
@@ -29,12 +31,17 @@ class ChatViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         whenever(preferencesManager.userId).thenReturn(flowOf("user-123"))
+        whenever(preferencesManager.appearanceSettings).thenReturn(
+            flowOf(com.whisprtext.app.data.model.AppearanceSettings())
+        )
+        whenever(contactRepository.contactsMap).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(emptyMap()))
         val dummyMessages = listOf(
             MessageEntity("msg-1", "conv-1", "user-123", "dev-1", "Hello", 1000L, "sent")
         )
         whenever(chatRepository.getMessages("conv-1")).thenReturn(flowOf(dummyMessages))
         whenever(chatRepository.getConversationFlow("conv-1")).thenReturn(flowOf(null))
-        viewModel = ChatViewModel("conv-1", chatRepository, preferencesManager)
+        whenever(chatRepository.observeProfileByUsername(any())).thenReturn(flowOf(null))
+        viewModel = ChatViewModel("conv-1", chatRepository, contactRepository, preferencesManager)
     }
 
     @After

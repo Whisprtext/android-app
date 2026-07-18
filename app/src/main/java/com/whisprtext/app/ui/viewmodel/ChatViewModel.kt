@@ -11,6 +11,7 @@ import com.whisprtext.app.data.repository.ContactRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.whisprtext.app.data.remote.model.UserDto
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 data class ChatUiState(
     val messages: List<MessageEntity> = emptyList(),
@@ -21,18 +22,19 @@ data class ChatUiState(
     val otherUser: UserDto? = null,
     val appearanceSettings: AppearanceSettings = AppearanceSettings()
 )
- 
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     val conversationId: String,
     private val chatRepository: ChatRepository,
     private val contactRepository: ContactRepository,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
- 
+
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
     private val _otherUser = MutableStateFlow<UserDto?>(null)
- 
+
     val uiState: StateFlow<ChatUiState> = combine(
         chatRepository.getMessages(conversationId),
         chatRepository.getConversationFlow(conversationId),
@@ -50,13 +52,31 @@ class ChatViewModel(
         val error = flowResults[5] as? String
         val appearance = flowResults[6] as AppearanceSettings
 
+        // Prefer live conversation.avatarUrl (updated when profile is refreshed) over stale otherUser.
+        val mergedOther = when {
+            otherUser == null && conversation?.username != null -> UserDto(
+                id = "",
+                username = conversation.username,
+                displayName = conversation.title.orEmpty(),
+                avatarUrl = conversation.avatarUrl.orEmpty(),
+                phoneNumber = conversation.phoneNumber,
+                bio = ""
+            )
+            otherUser != null && conversation != null -> otherUser.copy(
+                avatarUrl = conversation.avatarUrl?.takeIf { it.isNotBlank() } ?: otherUser.avatarUrl,
+                displayName = conversation.title?.takeIf { it.isNotBlank() } ?: otherUser.displayName,
+                phoneNumber = conversation.phoneNumber ?: otherUser.phoneNumber
+            )
+            else -> otherUser
+        }
+
         ChatUiState(
             messages = messages,
             contactsMap = contactsMap,
             isLoading = isLoading,
             error = error,
             conversation = conversation,
-            otherUser = otherUser,
+            otherUser = mergedOther,
             appearanceSettings = appearance
         )
     }.stateIn(
@@ -82,17 +102,30 @@ class ChatViewModel(
                 }
             }
         }
+        // Local-first contact profile for chat header; network refresh happens on profile open.
+        // Combines conversation + cached profile so avatar updates propagate live.
         viewModelScope.launch {
-            chatRepository.getConversationFlow(conversationId).collect { conversation ->
-                if (conversation != null && conversation.type == "direct" && !conversation.username.isNullOrEmpty()) {
-                    try {
-                        val user = chatRepository.searchUserByUsername(conversation.username)
-                        _otherUser.value = user
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+            chatRepository.getConversationFlow(conversationId)
+                .flatMapLatest { conversation ->
+                    val username = conversation?.username
+                    if (conversation == null || conversation.type != "direct" || username.isNullOrEmpty()) {
+                        flowOf(null to conversation)
+                    } else {
+                        chatRepository.observeProfileByUsername(username)
+                            .map { profile -> profile to conversation }
                     }
                 }
-            }
+                .collect { (cached, conversation) ->
+                    if (conversation == null) return@collect
+                    val username = conversation.username ?: return@collect
+                    _otherUser.value = cached ?: UserDto(
+                        id = "",
+                        username = username,
+                        displayName = conversation.title.orEmpty(),
+                        avatarUrl = conversation.avatarUrl.orEmpty(),
+                        phoneNumber = conversation.phoneNumber
+                    )
+                }
         }
         sync()
     }
@@ -120,14 +153,11 @@ class ChatViewModel(
 
     fun deleteMessage(messageId: String, forEveryone: Boolean) {
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
             try {
                 chatRepository.deleteMessage(messageId, forEveryone)
             } catch (e: Exception) {
+                e.printStackTrace()
                 _error.value = e.message ?: "Failed to delete message"
-            } finally {
-                _isLoading.value = false
             }
         }
     }
@@ -139,25 +169,35 @@ class ChatViewModel(
         extraUris: List<Pair<String, String>> = emptyList()
     ) {
         viewModelScope.launch {
-            val senderId = _currentUserId.value
-            if (senderId.isNotBlank()) {
+            try {
                 _isLoading.value = true
-                _error.value = null
-                try {
+                val senderId = _currentUserId.value
+                if (senderId.isNotBlank()) {
                     chatRepository.sendMediaMessage(
-                        conversationId, uriString, mimeType, senderId, "android-device",
-                        content = content, extraUris = extraUris
+                        conversationId = conversationId,
+                        uriString = uriString,
+                        mimeType = mimeType,
+                        senderId = senderId,
+                        senderDeviceId = "android-device",
+                        content = content,
+                        extraUris = extraUris
                     )
-                } catch (e: Exception) {
-                    _error.value = e.message ?: "Failed to send media file"
-                } finally {
-                    _isLoading.value = false
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _error.value = e.message ?: "Failed to send media file"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
 
     suspend fun getDecryptedFilePath(message: MessageEntity): String? {
-        return chatRepository.downloadAndDecryptMedia(message)
+        return try {
+            chatRepository.downloadAndDecryptMedia(message)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 }

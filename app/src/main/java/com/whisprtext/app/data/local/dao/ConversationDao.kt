@@ -38,4 +38,23 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations")
     suspend fun deleteAll()
+
+    /** Propagate a contact's profile fields into matching direct conversations. */
+    @Query(
+        """
+        UPDATE conversations
+        SET avatarUrl = :avatarUrl,
+            title = :displayName,
+            username = :username,
+            phoneNumber = :phoneNumber
+        WHERE type = 'direct' AND username = :matchUsername
+        """
+    )
+    suspend fun updateDirectConversationProfile(
+        matchUsername: String,
+        username: String,
+        displayName: String,
+        avatarUrl: String?,
+        phoneNumber: String?
+    )
 }

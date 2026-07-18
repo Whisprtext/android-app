@@ -1,5 +1,9 @@
 package com.whisprtext.app.ui.screen
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
@@ -8,6 +12,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,12 +22,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.whisprtext.app.ui.component.InitialsAvatar
+import com.whisprtext.app.ui.component.AvatarEditorDialog
+import com.whisprtext.app.ui.component.AvatarManagementSheet
+import com.whisprtext.app.ui.component.UserAvatar
 import com.whisprtext.app.ui.viewmodel.ProfileViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +46,7 @@ fun ProfileScreen(
     val userProfile by viewModel.userProfile.collectAsState()
     val gradientColors by viewModel.gradientColors.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isAvatarUploading by viewModel.isAvatarUploading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -55,8 +64,21 @@ fun ProfileScreen(
     var usernameInput by remember { mutableStateOf("") }
     var displayNameInput by remember { mutableStateOf("") }
     var bioInput by remember { mutableStateOf("") }
-    var avatarInput by remember { mutableStateOf("") }
     var phoneInput by remember { mutableStateOf("") }
+    var currentAvatarUrl by remember { mutableStateOf<String?>(null) }
+
+    var showAvatarSheet by remember { mutableStateOf(false) }
+    var showRemoveConfirm by remember { mutableStateOf(false) }
+    var editorImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            editorImageUri = uri
+        }
+        // Cancellation is a no-op; sheet already closed when picker opened.
+    }
 
     // Sync input states when userProfile updates
     LaunchedEffect(userProfile) {
@@ -64,7 +86,7 @@ fun ProfileScreen(
             usernameInput = user.username
             displayNameInput = user.displayName
             bioInput = user.bio
-            avatarInput = user.avatarUrl
+            currentAvatarUrl = user.avatarUrl.takeIf { it.isNotBlank() }
             phoneInput = user.phoneNumber ?: ""
         }
     }
@@ -76,6 +98,74 @@ fun ProfileScreen(
     }
 
     val isDark = isSystemInDarkTheme()
+    val hasCustomAvatar = !currentAvatarUrl.isNullOrBlank()
+
+    if (showAvatarSheet && isOwnProfile) {
+        ModalBottomSheet(
+            onDismissRequest = { if (!isAvatarUploading) showAvatarSheet = false },
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            AvatarManagementSheet(
+                hasCustomAvatar = hasCustomAvatar,
+                isBusy = isAvatarUploading,
+                onUploadClick = {
+                    showAvatarSheet = false
+                    photoPicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                onRemoveClick = {
+                    showAvatarSheet = false
+                    showRemoveConfirm = true
+                },
+                onDismiss = { showAvatarSheet = false }
+            )
+        }
+    }
+
+    if (showRemoveConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!isAvatarUploading) showRemoveConfirm = false },
+            title = { Text("Remove photo?") },
+            text = { Text("Your profile will show your initials instead.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRemoveConfirm = false
+                        viewModel.removeAvatar()
+                    },
+                    enabled = !isAvatarUploading
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showRemoveConfirm = false },
+                    enabled = !isAvatarUploading
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    editorImageUri?.let { uri ->
+        AvatarEditorDialog(
+            imageUri = uri,
+            isUploading = isAvatarUploading,
+            onDismiss = {
+                if (!isAvatarUploading) editorImageUri = null
+            },
+            onConfirm = { bytes ->
+                viewModel.uploadAvatar(bytes) { success ->
+                    if (success) {
+                        editorImageUri = null
+                    }
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -127,23 +217,21 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Profile Avatar (larger for public profile: 200.dp)
                 Box(
                     modifier = Modifier.padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     val avatarLabel = displayNameInput.ifBlank { usernameInput }
-                    InitialsAvatar(
+                    UserAvatar(
                         id = avatarLabel,
                         modifier = Modifier.size(200.dp),
-                        avatarUrl = avatarInput,
+                        avatarUrl = currentAvatarUrl,
                         fontSize = 80.sp,
                         gradientStart = gradientColors.first?.let { Color(it) },
                         gradientEnd = gradientColors.second?.let { Color(it) }
                     )
                 }
 
-                // About Info in quotation
                 val displayBio = bioInput.ifBlank { "No bio provided" }
                 Text(
                     text = "\"$displayBio\"",
@@ -154,7 +242,6 @@ fun ProfileScreen(
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                 )
 
-                // Phone Number (horizontally centered)
                 if (phoneInput.isNotBlank()) {
                     Text(
                         text = phoneInput,
@@ -176,23 +263,58 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Profile Avatar (180.dp for own profile)
+                // Tappable profile avatar
                 Box(
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = !isAvatarUploading) { showAvatarSheet = true },
                     contentAlignment = Alignment.Center
                 ) {
                     val avatarLabel = displayNameInput.ifBlank { usernameInput }
-                    InitialsAvatar(
+                    UserAvatar(
                         id = avatarLabel,
                         modifier = Modifier.size(180.dp),
-                        avatarUrl = avatarInput,
+                        avatarUrl = currentAvatarUrl,
                         fontSize = 72.sp,
                         gradientStart = gradientColors.first?.let { Color(it) },
-                        gradientEnd = gradientColors.second?.let { Color(it) }
+                        gradientEnd = gradientColors.second?.let { Color(it) },
+                        contentDescription = "Profile photo. Tap to change."
                     )
+                    // Camera badge
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(44.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        shadowElevation = 4.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (isAvatarUploading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.PhotoCamera,
+                                    contentDescription = "Change photo",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
-                // Error alert box
+                Text(
+                    text = "Tap to change profile photo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 AnimatedVisibility(
                     visible = errorMessage != null,
                     enter = expandVertically() + fadeIn(),
@@ -211,7 +333,6 @@ fun ProfileScreen(
                     }
                 }
 
-                // Profile Info Section
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -266,26 +387,15 @@ fun ProfileScreen(
                         colors = fieldColors
                     )
 
-                    OutlinedTextField(
-                        value = avatarInput,
-                        onValueChange = { avatarInput = it },
-                        label = { Text("Avatar Photo URL") },
-                        leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = fieldColors
-                    )
-
                     Button(
                         onClick = {
                             viewModel.saveProfile(
                                 username = usernameInput,
                                 displayName = displayNameInput,
-                                bio = bioInput,
-                                avatarUrl = avatarInput
+                                bio = bioInput
                             )
                         },
-                        enabled = !isLoading && isUsernameValid && isDisplayNameValid,
+                        enabled = !isLoading && !isAvatarUploading && isUsernameValid && isDisplayNameValid,
                         modifier = Modifier.align(Alignment.End),
                         shape = MaterialTheme.shapes.medium
                     ) {
@@ -294,7 +404,6 @@ fun ProfileScreen(
                         Text("Save Profile")
                     }
 
-                    // Privacy Section (only for own profile)
                     Spacer(Modifier.height(8.dp))
                     Text("Privacy & Discovery", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     HorizontalDivider()

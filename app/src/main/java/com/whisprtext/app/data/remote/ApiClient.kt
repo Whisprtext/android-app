@@ -204,7 +204,7 @@ class ApiClient(
         username: String,
         displayName: String,
         bio: String,
-        avatarUrl: String
+        avatarUrl: String = ""
     ): UserDto {
         val json = gson.toJson(UpdateProfileRequest(username, displayName, bio, avatarUrl))
         val body = json.toRequestBody(jsonMediaType)
@@ -215,6 +215,62 @@ class ApiClient(
 
         return executeRequest(request)
     }
+
+    suspend fun initAvatarUpload(mimeType: String, sizeBytes: Long): AvatarUploadInitResponse {
+        val json = gson.toJson(AvatarUploadInitRequest(mimeType, sizeBytes))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/me/avatar/upload/init")
+            .post(body)
+            .build()
+        return executeRequest(request)
+    }
+
+    suspend fun setAvatar(
+        fileId: String,
+        fileUrl: String,
+        mimeType: String,
+        sizeBytes: Long
+    ): UserDto {
+        val json = gson.toJson(SetAvatarRequest(fileId, fileUrl, mimeType, sizeBytes))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/me/avatar")
+            .put(body)
+            .build()
+        return executeRequest(request)
+    }
+
+    suspend fun removeAvatar(): UserDto {
+        val request = Request.Builder()
+            .url("$baseUrl/me/avatar")
+            .delete()
+            .build()
+        return executeRequest(request)
+    }
+
+    suspend fun getAvatarDownloadUrl(fileUrl: String): MediaDownloadResponse {
+        val encodedUrl = java.net.URLEncoder.encode(fileUrl, "UTF-8")
+        val request = Request.Builder()
+            .url("$baseUrl/media/avatar?file_url=$encodedUrl")
+            .get()
+            .build()
+        return executeRequest(request)
+    }
+
+    /** Upload raw avatar bytes to a presigned URL with the correct content type. */
+    suspend fun uploadAvatarFile(uploadUrl: String, bytes: ByteArray, mimeType: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val mediaType = mimeType.toMediaType()
+            val body = bytes.toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(uploadUrl)
+                .put(body)
+                .build()
+            storageClient.newCall(request).execute().use { response ->
+                response.isSuccessful
+            }
+        }
 
     suspend fun updatePushToken(token: String): Boolean {
         val json = gson.toJson(mapOf("push_token" to token))

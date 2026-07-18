@@ -60,21 +60,35 @@ class ConversationsViewModel(
 
     init {
         sync()
-        fetchMyProfile()
+        ensureLocalOwnProfile()
     }
 
-    private fun fetchMyProfile() {
+    /**
+     * Use local own-profile cache only. Network refresh happens after mutations
+     * (profile save / avatar upload), not on every conversations screen open.
+     * Seeds from network only if local cache is empty (first launch after login).
+     */
+    private fun ensureLocalOwnProfile() {
         viewModelScope.launch {
             try {
-                val me = chatRepository.getMe()
-                preferencesManager.saveAvatarUrl(me.user.avatarUrl)
-                preferencesManager.saveDisplayName(me.user.displayName)
-                
-                // Also ensure we have gradient colors for ourselves
-                val currentStart = preferencesManager.gradientStart.first()
-                if (currentStart == null) {
-                    val (start, end) = com.whisprtext.app.util.ColorGenerator.generateGradient(me.user.id)
-                    preferencesManager.saveGradientColors(start, end)
+                val cached = chatRepository.getCachedSelfProfile()
+                if (cached != null) {
+                    val currentStart = preferencesManager.gradientStart.first()
+                    if (currentStart == null) {
+                        val (start, end) = com.whisprtext.app.util.ColorGenerator.generateGradient(cached.id)
+                        preferencesManager.saveGradientColors(start, end)
+                    }
+                    return@launch
+                }
+                // Empty cache — one-time seed so avatars/names appear after reinstall/login.
+                chatRepository.refreshOwnProfileFromNetwork()
+                val userId = preferencesManager.userId.first()
+                if (userId != null) {
+                    val currentStart = preferencesManager.gradientStart.first()
+                    if (currentStart == null) {
+                        val (start, end) = com.whisprtext.app.util.ColorGenerator.generateGradient(userId)
+                        preferencesManager.saveGradientColors(start, end)
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

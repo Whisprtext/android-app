@@ -47,7 +47,7 @@ class ContactDiscoveryViewModel(
             _isLoading.value = true
             _searchResult.value = null
             try {
-                val user = chatRepository.searchUserByUsername(username)
+                val user = chatRepository.searchUserByUsername(username, cacheResult = true)
                 _searchResult.value = user
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -93,6 +93,7 @@ class ContactDiscoveryViewModel(
             _isLoading.value = true
             try {
                 val existing = chatRepository.getDirectConversationByContact(user.username, user.phoneNumber)
+                chatRepository.cacheUserProfile(user, isSelf = false)
                 if (existing != null) {
                     _chatCreated.emit(existing)
                 } else {
