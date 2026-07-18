@@ -7,12 +7,14 @@ import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.model.AppearanceSettings
 import com.whisprtext.app.data.repository.ChatRepository
+import com.whisprtext.app.data.repository.ContactRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.whisprtext.app.data.remote.model.UserDto
 
 data class ChatUiState(
     val messages: List<MessageEntity> = emptyList(),
+    val contactsMap: Map<String, String> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val conversation: ConversationEntity? = null,
@@ -23,6 +25,7 @@ data class ChatUiState(
 class ChatViewModel(
     val conversationId: String,
     private val chatRepository: ChatRepository,
+    private val contactRepository: ContactRepository,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
  
@@ -33,6 +36,7 @@ class ChatViewModel(
     val uiState: StateFlow<ChatUiState> = combine(
         chatRepository.getMessages(conversationId),
         chatRepository.getConversationFlow(conversationId),
+        contactRepository.contactsMap,
         _otherUser,
         _isLoading,
         _error,
@@ -40,13 +44,15 @@ class ChatViewModel(
     ) { flowResults ->
         val messages = flowResults[0] as List<MessageEntity>
         val conversation = flowResults[1] as? ConversationEntity
-        val otherUser = flowResults[2] as? UserDto
-        val isLoading = flowResults[3] as Boolean
-        val error = flowResults[4] as? String
-        val appearance = flowResults[5] as AppearanceSettings
+        val contactsMap = flowResults[2] as Map<String, String>
+        val otherUser = flowResults[3] as? UserDto
+        val isLoading = flowResults[4] as Boolean
+        val error = flowResults[5] as? String
+        val appearance = flowResults[6] as AppearanceSettings
 
         ChatUiState(
             messages = messages,
+            contactsMap = contactsMap,
             isLoading = isLoading,
             error = error,
             conversation = conversation,

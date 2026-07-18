@@ -1,14 +1,18 @@
 package com.whisprtext.app.ui.component
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -16,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.theme.InterFontFamily
+import com.whisprtext.app.ui.theme.Motion
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -44,8 +49,21 @@ fun ChatBubble(
         )
     }
 
+    val animatedProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        animatedProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(Motion.MediumDuration2, easing = Motion.DecelerateEasing)
+        )
+    }
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animatedProgress.value
+                translationX = (if (isSelf) 20.dp else (-20).dp).toPx() * (1f - animatedProgress.value)
+            },
         horizontalAlignment = alignment
     ) {
         Column(

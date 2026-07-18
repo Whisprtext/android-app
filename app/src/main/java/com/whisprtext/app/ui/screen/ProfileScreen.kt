@@ -1,6 +1,9 @@
 package com.whisprtext.app.ui.screen
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
+import com.whisprtext.app.ui.theme.Motion
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -190,7 +193,11 @@ fun ProfileScreen(
                 }
 
                 // Error alert box
-                if (errorMessage != null) {
+                AnimatedVisibility(
+                    visible = errorMessage != null,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                         modifier = Modifier.fillMaxWidth()
@@ -206,7 +213,9 @@ fun ProfileScreen(
 
                 // Profile Info Section
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("Profile Info", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)

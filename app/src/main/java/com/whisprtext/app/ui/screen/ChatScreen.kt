@@ -48,6 +48,7 @@ import com.whisprtext.app.ui.component.DoodleBorderBackground
 import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.WhisprTheme
+import com.whisprtext.app.ui.theme.Motion
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.util.ContactHelper
 import com.whisprtext.app.util.MarkdownParser
@@ -74,6 +75,7 @@ fun ChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val otherUser = uiState.otherUser
+    val contactsMap = uiState.contactsMap
     val currentUserId by viewModel.currentUserId.collectAsState()
     val appearance = uiState.appearanceSettings
     val isDark = when (appearance.themeMode) {
@@ -120,8 +122,6 @@ fun ChatScreen(
         else permissionLauncher.launch(mediaPermissions)
     }
 
-    var fullscreenMediaPath by remember { mutableStateOf<String?>(null) }
-
     val backgroundModifier = remember(theme, isDark) {
         val gradientColors = if (isDark) theme.gradientColorsDark else theme.gradientColorsLight
         val backgroundColor = if (isDark) theme.backgroundColorDark else theme.backgroundColorLight
@@ -136,10 +136,31 @@ fun ChatScreen(
     var messageToDelete by remember { mutableStateOf<MessageEntity?>(null) }
     var isHeaderExpanded by remember { mutableStateOf(false) }
 
+    val headerTransition = updateTransition(targetState = isHeaderExpanded, label = "HeaderExpansion")
+
+    val headerHeight by headerTransition.animateDp(
+        transitionSpec = {
+            if (targetState) {
+                tween(Motion.LongDuration3, easing = Motion.EmphasizedDecelerateEasing)
+            } else {
+                tween(Motion.LongDuration3, easing = Motion.EmphasizedAccelerateEasing)
+            }
+        },
+        label = "HeaderHeight"
+    ) { expanded ->
+        if (expanded) 320.dp else 0.dp
+    }
+
+    val headerAlpha by headerTransition.animateFloat(
+        transitionSpec = { tween(Motion.MediumDuration2) },
+        label = "HeaderAlpha"
+    ) { expanded ->
+        if (expanded) 1f else 0f
+    }
+
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
     val displayTitle = remember(uiState.conversation, contactsMap) {
         val conversation = uiState.conversation
         if (conversation != null) {
@@ -255,8 +276,8 @@ fun ChatScreen(
 
             val isCurrentSameType = when (listType) {
                 "bullet" -> bulletMatch != null
-                "number" -> numberMatch != null
-                "roman" -> romanMatch != null
+                "number" -> { numberMatch != null }
+                "roman" -> { romanMatch != null }
                 else -> false
             }
 
@@ -621,57 +642,73 @@ fun ChatScreen(
                     }
 
                     // Expansion overlay
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        AnimatedVisibility(
-                            visible = isHeaderExpanded,
-                            enter = expandVertically(
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessLow
-                                )
-                            ) + fadeIn(animationSpec = tween(500)),
-                            exit = shrinkVertically(
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessLow
-                                )
-                            ) + fadeOut(animationSpec = tween(400))
+                    if (headerHeight > 0.dp) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(headerHeight)
+                                .graphicsLayer { alpha = headerAlpha },
+                            shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                            shadowElevation = 8.dp,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = if (isDark) BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                            ) else null
                         ) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
-                                shadowElevation = 8.dp,
-                                color = MaterialTheme.colorScheme.surface,
-                                border = if (isDark) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isHeaderExpanded = false }
+                                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                val targetUsername = uiState.conversation?.username
+                                if (uiState.conversation?.type == "direct") {
+                                    val avatarSize = 200.dp
+                                    val minAvatarSize = 40.dp
+                                    val expansionProgress = remember(headerHeight) {
+                                        ((headerHeight - 100.dp) / 220.dp).coerceIn(0f, 1f)
+                                    }
+
+                                    InitialsAvatar(
+                                        id = displayTitle,
+                                        avatarUrl = otherUser?.avatarUrl,
+                                        modifier = Modifier
+                                            .size(avatarSize)
+                                            .graphicsLayer {
+                                                val currentSize = minAvatarSize + (avatarSize - minAvatarSize) * expansionProgress
+                                                val scale = currentSize.toPx() / avatarSize.toPx()
+                                                scaleX = scale
+                                                scaleY = scale
+                                                alpha = headerAlpha
+                                            }
+                                            .clickable {
+                                                if (targetUsername != null) {
+                                                    onProfileClick(targetUsername)
+                                                }
+                                            },
+                                        fontSize = 80.sp,
+                                        gradientStart = uiState.conversation?.gradientStartColor?.let { Color(it) },
+                                        gradientEnd = uiState.conversation?.gradientEndColor?.let { Color(it) }
+                                    )
+                                }
+
+                                val detailsAlpha = remember(headerHeight) {
+                                    ((headerHeight - 220.dp) / 80.dp).coerceIn(0f, 1f)
+                                }
+
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { isHeaderExpanded = false }
-                                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                                        .graphicsLayer { 
+                                            alpha = detailsAlpha
+                                            translationY = (1f - detailsAlpha) * 20.dp.toPx()
+                                        },
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    val targetUsername = uiState.conversation?.username
-                                    if (uiState.conversation?.type == "direct") {
-                                        InitialsAvatar(
-                                            id = displayTitle,
-                                            avatarUrl = otherUser?.avatarUrl,
-                                            modifier = Modifier
-                                                .size(200.dp)
-                                                .clickable {
-                                                    if (targetUsername != null) {
-                                                        onProfileClick(targetUsername)
-                                                    }
-                                                },
-                                            fontSize = 80.sp,
-                                            gradientStart = uiState.conversation?.gradientStartColor?.let { Color(it) },
-                                            gradientEnd = uiState.conversation?.gradientEndColor?.let { Color(it) }
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                    }
-
                                     if (otherUser?.bio?.isNotEmpty() == true) {
-                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Spacer(modifier = Modifier.height(16.dp))
                                         Text(
                                             text = "\"${otherUser.bio}\"",
                                             style = MaterialTheme.typography.bodyLarge,

@@ -1,5 +1,7 @@
 package com.whisprtext.app.ui.screen
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
@@ -32,6 +34,7 @@ import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.component.StatusAvatar
 import androidx.compose.ui.text.font.FontWeight
 import com.whisprtext.app.ui.theme.DynaPuffFontFamily
+import com.whisprtext.app.ui.theme.Motion
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
 
 import com.whisprtext.app.util.ContactHelper
@@ -54,8 +57,7 @@ fun ConversationListScreen(
     onAddContactClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
-    val contactsMap = remember(context) { ContactHelper.getContactsMap(context) }
+    val contactsMap = uiState.contactsMap
 
     var selectedConversationIds by remember { mutableStateOf(emptySet<String>()) }
     val isSelectionMode = selectedConversationIds.isNotEmpty()
@@ -66,6 +68,10 @@ fun ConversationListScreen(
 
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    
+    val conversationClickOnce = remember { { id: String -> onConversationClick(id) } }
+    val profileClickOnce = remember { { onProfileClick() } }
+    val addContactClickOnce = remember { { onAddContactClick() } }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -113,40 +119,65 @@ fun ConversationListScreen(
                         }
                     )
                 } else {
-                    Column {
+                    Column(
+                        modifier = Modifier.animateContentSize(
+                            animationSpec = tween(
+                                durationMillis = 400,
+                                easing = FastOutSlowInEasing
+                            )
+                        )
+                    ) {
                         TopAppBar(
                             title = {
-                                Text(
-                                    when (pagerState.currentPage) {
-                                        0 -> "WhisprText"
-                                        1 -> "Community"
-                                        2 -> "Calls"
-                                        3 -> "Whispr AI"
-                                        4 -> "Tracking"
-                                        else -> "WhisprText"
+                                AnimatedContent(
+                                    targetState = pagerState.currentPage,
+                                    transitionSpec = {
+                                        fadeIn(animationSpec = tween(Motion.ShortDuration2)) togetherWith
+                                                fadeOut(animationSpec = tween(Motion.ShortDuration2))
                                     },
-                                    style = MaterialTheme.typography.headlineSmall.copy(
-                                        fontFamily = DynaPuffFontFamily,
-                                        fontWeight = FontWeight.SemiBold
+                                    label = "TitleTransition"
+                                ) { page ->
+                                    Text(
+                                        when (page) {
+                                            0 -> "WhisprText"
+                                            1 -> "Community"
+                                            2 -> "Calls"
+                                            3 -> "Whispr AI"
+                                            4 -> "Tracking"
+                                            else -> "WhisprText"
+                                        },
+                                        style = MaterialTheme.typography.headlineSmall.copy(
+                                            fontFamily = DynaPuffFontFamily,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
                                     )
-                                )
+                                }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = Color.Transparent
                             ),
                             actions = {
-                                if (pagerState.currentPage == 0) {
-                                    IconButton(onClick = { isSearchActive = !isSearchActive }) {
-                                        Icon(
-                                            imageVector = if (isSearchActive) Icons.Rounded.SearchOff else Icons.Rounded.Search,
-                                            contentDescription = "Search"
-                                        )
-                                    }
-                                    IconButton(onClick = { /* TODO: Implement payment screen navigation */ }) {
-                                        Icon(Icons.Rounded.CreditCard, contentDescription = "Payments")
+                                val isChatTab = pagerState.currentPage == 0
+                                AnimatedVisibility(
+                                    visible = isChatTab,
+                                    enter = fadeIn(animationSpec = tween(Motion.ShortDuration2)) + 
+                                            scaleIn(animationSpec = tween(Motion.ShortDuration2)),
+                                    exit = fadeOut(animationSpec = tween(Motion.ShortDuration2)) + 
+                                            scaleOut(animationSpec = tween(Motion.ShortDuration2))
+                                ) {
+                                    Row {
+                                        IconButton(onClick = { isSearchActive = !isSearchActive }) {
+                                            Icon(
+                                                imageVector = if (isSearchActive) Icons.Rounded.SearchOff else Icons.Rounded.Search,
+                                                contentDescription = "Search"
+                                            )
+                                        }
+                                        IconButton(onClick = { /* TODO: Implement payment screen navigation */ }) {
+                                            Icon(Icons.Rounded.CreditCard, contentDescription = "Payments")
+                                        }
                                     }
                                 }
-                                IconButton(onClick = onProfileClick) {
+                                IconButton(onClick = profileClickOnce) {
                                     InitialsAvatar(
                                         id = uiState.displayName ?: uiState.username ?: "Me",
                                         avatarUrl = uiState.avatarUrl,
@@ -157,89 +188,130 @@ fun ConversationListScreen(
                                 }
                             }
                         )
-                        if (pagerState.currentPage == 0) {
-                            LazyRow(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 16.dp),
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                // First show "Your Story" (me)
-                                item {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        StatusAvatar(
-                                            avatarUrl = uiState.avatarUrl,
-                                            id = uiState.displayName ?: uiState.username ?: "Me",
-                                            showBorder = false,
-                                            showPlusIcon = true,
-                                            gradientStart = uiState.gradientStart?.let { Color(it) },
-                                            gradientEnd = uiState.gradientEnd?.let { Color(it) }
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "My Status",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                // Then show contacts' avatars
-                                val statusConversations = uiState.conversations.filter { it.avatarUrl != null || it.title != null }
-                                items(statusConversations) { conversation ->
-                                    val name = remember(conversation, contactsMap) {
-                                        if (conversation.type == "direct") {
-                                            val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
-                                            if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
-                                                contactsMap[normalizedPhone] ?: conversation.title ?: conversation.username ?: "Chat"
-                                            } else {
-                                                conversation.title ?: conversation.username ?: "Chat"
-                                            }
-                                        } else {
-                                            conversation.title ?: "Chat"
+                        
+                        AnimatedVisibility(
+                            visible = pagerState.currentPage == 0,
+                            enter = expandVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            ) + fadeIn(animationSpec = tween(Motion.MediumDuration2)),
+                            exit = shrinkVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            ) + fadeOut(animationSpec = tween(Motion.MediumDuration2))
+                        ) {
+                            Column {
+                                LazyRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 16.dp),
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // First show "Your Story" (me)
+                                    item {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.animateItem()
+                                        ) {
+                                            StatusAvatar(
+                                                avatarUrl = uiState.avatarUrl,
+                                                id = uiState.displayName ?: uiState.username ?: "Me",
+                                                showBorder = false,
+                                                showPlusIcon = true,
+                                                gradientStart = uiState.gradientStart?.let { Color(it) },
+                                                gradientEnd = uiState.gradientEnd?.let { Color(it) }
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "My Status",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        StatusAvatar(
-                                            avatarUrl = conversation.avatarUrl,
-                                            id = name,
-                                            gradientStart = conversation.gradientStartColor?.let { Color(it) },
-                                            gradientEnd = conversation.gradientEndColor?.let { Color(it) }
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = name.take(8),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+
+                                    // Then show contacts' avatars
+                                    val statusConversations = uiState.conversations.filter { it.avatarUrl != null || it.title != null }
+                                    items(
+                                        items = statusConversations,
+                                        key = { it.id }
+                                    ) { conversation ->
+                                        val name = remember(conversation, contactsMap) {
+                                            if (conversation.type == "direct") {
+                                                val normalizedPhone = conversation.phoneNumber?.let { ContactHelper.normalizePhone(it) }
+                                                if (normalizedPhone != null && contactsMap.containsKey(normalizedPhone)) {
+                                                    contactsMap[normalizedPhone] ?: conversation.title ?: conversation.username ?: "Chat"
+                                                } else {
+                                                    conversation.title ?: conversation.username ?: "Chat"
+                                                }
+                                            } else {
+                                                conversation.title ?: "Chat"
+                                            }
+                                        }
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.animateItem()
+                                        ) {
+                                            StatusAvatar(
+                                                avatarUrl = conversation.avatarUrl,
+                                                id = name,
+                                                gradientStart = conversation.gradientStartColor?.let { Color(it) },
+                                                gradientEnd = conversation.gradientEndColor?.let { Color(it) }
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = name.take(8),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
+                                }
+                                
+                                AnimatedVisibility(
+                                    visible = isSearchActive,
+                                    enter = expandVertically(
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMediumLow
+                                        )
+                                    ) + fadeIn(animationSpec = tween(Motion.MediumDuration2)),
+                                    exit = shrinkVertically(
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMediumLow
+                                        )
+                                    ) + fadeOut(animationSpec = tween(Motion.MediumDuration2))
+                                ) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                                        placeholder = { Text("Search chats...") },
+                                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                                        trailingIcon = {
+                                            if (searchQuery.isNotEmpty()) {
+                                                IconButton(onClick = { searchQuery = "" }) {
+                                                    Icon(Icons.Rounded.Clear, contentDescription = "Clear")
+                                                }
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(28.dp),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                    )
                                 }
                             }
-                        }
-                        if (pagerState.currentPage == 0 && isSearchActive) {
-                            OutlinedTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                                placeholder = { Text("Search chats...") },
-                                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                                trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Icons.Rounded.Clear, contentDescription = "Clear")
-                                        }
-                                    }
-                                },
-                                shape = RoundedCornerShape(28.dp),
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                                )
-                            )
                         }
                     }
                 }
@@ -293,7 +365,7 @@ fun ConversationListScreen(
         floatingActionButton = {
             if (pagerState.currentPage == 0) {
                 FloatingActionButton(
-                    onClick = onAddContactClick,
+                    onClick = addContactClickOnce,
                     shape = CircleShape,
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -379,7 +451,7 @@ fun ConversationListScreen(
                                                     selectedConversationIds + conversation.id
                                                 }
                                             } else {
-                                                onConversationClick(conversation.id)
+                                                conversationClickOnce(conversation.id)
                                             }
                                         }
                                     )

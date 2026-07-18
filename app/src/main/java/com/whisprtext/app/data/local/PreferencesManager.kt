@@ -12,6 +12,7 @@ import com.whisprtext.app.data.model.AppearanceSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "whisprtext_prefs")
 
@@ -44,7 +45,7 @@ class PreferencesManager(private val context: Context) {
         } else {
             AppearanceSettings()
         }
-    }
+    }.distinctUntilChanged()
 
     suspend fun saveAppearanceSettings(settings: AppearanceSettings) {
         context.dataStore.edit { preferences ->
@@ -54,7 +55,7 @@ class PreferencesManager(private val context: Context) {
 
     val sessionToken: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_SESSION_TOKEN]
-    }
+    }.distinctUntilChanged()
 
     val deviceName: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_DEVICE_NAME]

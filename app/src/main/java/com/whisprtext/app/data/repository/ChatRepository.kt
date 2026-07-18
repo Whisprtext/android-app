@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -155,16 +156,20 @@ class ChatRepository @JvmOverloads constructor(
         scope.launch {
             try {
                 var wasOffline = false
+                var isFirstSync = true
                 networkMonitor?.isOnline?.collect { isOnline ->
                     if (isOnline) {
-                        if (wasOffline) {
-                            // Coming back online: flush pending receipts before delta sync
-                            // so the server gets accurate delivery information.
+                        if (isFirstSync) {
+                            // Delay initial heavy sync to prioritize startup smoothness
+                            delay(1500)
+                            isFirstSync = false
+                            
                             syncReceipts()
                             syncDelta()
                             retryFailedMessages()
-                        } else {
-                            // Resync when initialized while online
+                        } else if (wasOffline) {
+                            // Coming back online: flush pending receipts before delta sync
+                            // so the server gets accurate delivery information.
                             syncReceipts()
                             syncDelta()
                             retryFailedMessages()

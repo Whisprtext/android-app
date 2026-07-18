@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.repository.ChatRepository
+import com.whisprtext.app.data.repository.ContactRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class ConversationsUiState(
     val conversations: List<ConversationEntity> = emptyList(),
+    val contactsMap: Map<String, String> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val username: String? = null,
@@ -21,6 +23,7 @@ data class ConversationsUiState(
 
 class ConversationsViewModel(
     private val chatRepository: ChatRepository,
+    private val contactRepository: ContactRepository,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
@@ -29,6 +32,7 @@ class ConversationsViewModel(
 
     val uiState: StateFlow<ConversationsUiState> = combine(
         chatRepository.getConversations(),
+        contactRepository.contactsMap,
         preferencesManager.username,
         preferencesManager.displayName,
         preferencesManager.avatarUrl,
@@ -39,13 +43,14 @@ class ConversationsViewModel(
     ) { args ->
         ConversationsUiState(
             conversations = args[0] as List<ConversationEntity>,
-            username = args[1] as? String,
-            displayName = args[2] as? String,
-            avatarUrl = args[3] as? String,
-            gradientStart = args[4] as? Int,
-            gradientEnd = args[5] as? Int,
-            isLoading = args[6] as Boolean,
-            error = args[7] as? String
+            contactsMap = args[1] as Map<String, String>,
+            username = args[2] as? String,
+            displayName = args[3] as? String,
+            avatarUrl = args[4] as? String,
+            gradientStart = args[5] as? Int,
+            gradientEnd = args[6] as? Int,
+            isLoading = args[7] as Boolean,
+            error = args[8] as? String
         )
     }.stateIn(
         scope = viewModelScope,

@@ -13,9 +13,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import com.whisprtext.app.ui.theme.DynaPuffFontFamily
 import com.whisprtext.app.ui.viewmodel.AuthState
-
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import com.whisprtext.app.ui.theme.Motion
+import com.whisprtext.app.ui.component.glowShader
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.text.input.ImeAction
 import android.util.Log
@@ -47,7 +50,14 @@ fun AuthScreen(
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -57,13 +67,30 @@ fun AuthScreen(
                     color = MaterialTheme.colorScheme.primary,
                     fontFamily = DynaPuffFontFamily,
                     fontWeight = FontWeight.SemiBold
-                )
+                ),
+                modifier = Modifier.glowShader(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
             )
 
-            Text(
-                text = if (isLogin) "Welcome back" else "Create privacy-focused account",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            AnimatedContent(
+                targetState = isLogin,
+                transitionSpec = {
+                    if (targetState) {
+                        (slideInHorizontally(animationSpec = tween(Motion.MediumDuration1)) { -it } + fadeIn())
+                            .togetherWith(slideOutHorizontally(animationSpec = tween(Motion.MediumDuration1)) { it } + fadeOut())
+                    } else {
+                        (slideInHorizontally(animationSpec = tween(Motion.MediumDuration1)) { it } + fadeIn())
+                            .togetherWith(slideOutHorizontally(animationSpec = tween(Motion.MediumDuration1)) { -it } + fadeOut())
+                    }.using(
+                        SizeTransform(clip = false)
+                    )
+                },
+                label = "AuthModeTransition"
+            ) { targetIsLogin ->
+                Text(
+                    text = if (targetIsLogin) "Welcome back" else "Create privacy-focused account",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -113,21 +140,32 @@ fun AuthScreen(
 
             Button(
                 onClick = {
-                    Log.d("AuthScreen", "Submit Button clicked: isLogin=$isLogin, username=$username")
-                    if (isLogin) {
-                        viewModel.login(username, password)
-                    } else {
-                        viewModel.signup(username, password)
+                    if (username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading) {
+                        Log.d("AuthScreen", "Submit Button clicked: isLogin=$isLogin, username=$username")
+                        if (isLogin) {
+                            viewModel.login(username, password)
+                        } else {
+                            viewModel.signup(username, password)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 enabled = username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading,
                 shape = MaterialTheme.shapes.medium
             ) {
-                if (authState is AuthState.Loading) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
-                } else {
-                    Text(if (isLogin) "Login" else "Sign Up")
+                AnimatedContent(
+                    targetState = authState,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(Motion.ShortDuration2)) togetherWith 
+                        fadeOut(animationSpec = tween(Motion.ShortDuration2))
+                    },
+                    label = "AuthButtonContent"
+                ) { targetState ->
+                    if (targetState is AuthState.Loading) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    } else {
+                        Text(if (isLogin) "Login" else "Sign Up")
+                    }
                 }
             }
 
