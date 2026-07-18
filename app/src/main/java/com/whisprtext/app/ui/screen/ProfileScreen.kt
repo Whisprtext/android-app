@@ -46,6 +46,7 @@ fun ProfileScreen(
     val userProfile by viewModel.userProfile.collectAsState()
     val gradientColors by viewModel.gradientColors.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val isAvatarUploading by viewModel.isAvatarUploading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
@@ -169,31 +170,40 @@ fun ProfileScreen(
 
     Scaffold(
         topBar = {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
-                shadowElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surface,
-                border = if (isDark) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
-            ) {
-                TopAppBar(
-                    title = { Text("Profile") },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        if (isOwnProfile) {
-                            IconButton(onClick = onSettingsClick) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings")
+            Column {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                    shadowElevation = 4.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = if (isDark) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)) else null
+                ) {
+                    TopAppBar(
+                        title = { Text("Profile") },
+                        navigationIcon = {
+                            IconButton(onClick = onBackClick) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
+                        },
+                        actions = {
+                            if (isOwnProfile) {
+                                IconButton(onClick = onSettingsClick) {
+                                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        )
                     )
-                )
+                }
+                if (isRefreshing) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(2.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent
+                    )
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }

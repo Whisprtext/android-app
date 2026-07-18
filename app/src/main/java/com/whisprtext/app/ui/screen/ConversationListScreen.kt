@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,7 +54,7 @@ enum class HomeTab(val title: String, val icon: ImageVector) {
 fun ConversationListScreen(
     viewModel: ConversationsViewModel,
     onConversationClick: (String) -> Unit,
-    onProfileClick: () -> Unit,
+    onProfileClick: (String?) -> Unit,
     onAddContactClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -70,7 +71,7 @@ fun ConversationListScreen(
     var searchQuery by remember { mutableStateOf("") }
     
     val conversationClickOnce = remember { { id: String -> onConversationClick(id) } }
-    val profileClickOnce = remember { { onProfileClick() } }
+    val profileClickOnce = remember { { username: String? -> onProfileClick(username) } }
     val addContactClickOnce = remember { { onAddContactClick() } }
 
     Scaffold(
@@ -177,7 +178,7 @@ fun ConversationListScreen(
                                         }
                                     }
                                 }
-                                IconButton(onClick = profileClickOnce) {
+                                IconButton(onClick = { profileClickOnce(null) }) {
                                     InitialsAvatar(
                                         id = uiState.displayName ?: uiState.username ?: "Me",
                                         avatarUrl = uiState.avatarUrl,
@@ -218,14 +219,16 @@ fun ConversationListScreen(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             modifier = Modifier.animateItem()
                                         ) {
-                                            StatusAvatar(
-                                                avatarUrl = uiState.avatarUrl,
-                                                id = uiState.displayName ?: uiState.username ?: "Me",
-                                                showBorder = false,
-                                                showPlusIcon = true,
-                                                gradientStart = uiState.gradientStart?.let { Color(it) },
-                                                gradientEnd = uiState.gradientEnd?.let { Color(it) }
-                                            )
+                                            Box(modifier = Modifier.clickable { profileClickOnce(null) }) {
+                                                StatusAvatar(
+                                                    avatarUrl = uiState.avatarUrl,
+                                                    id = uiState.displayName ?: uiState.username ?: "Me",
+                                                    showBorder = false,
+                                                    showPlusIcon = true,
+                                                    gradientStart = uiState.gradientStart?.let { Color(it) },
+                                                    gradientEnd = uiState.gradientEnd?.let { Color(it) }
+                                                )
+                                            }
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
                                                 text = "My Status",
@@ -257,12 +260,16 @@ fun ConversationListScreen(
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                             modifier = Modifier.animateItem()
                                         ) {
-                                            StatusAvatar(
-                                                avatarUrl = conversation.avatarUrl,
-                                                id = name,
-                                                gradientStart = conversation.gradientStartColor?.let { Color(it) },
-                                                gradientEnd = conversation.gradientEndColor?.let { Color(it) }
-                                            )
+                                            Box(modifier = Modifier.clickable { 
+                                                if (conversation.type == "direct") profileClickOnce(conversation.username) 
+                                            }) {
+                                                StatusAvatar(
+                                                    avatarUrl = conversation.avatarUrl,
+                                                    id = name,
+                                                    gradientStart = conversation.gradientStartColor?.let { Color(it) },
+                                                    gradientEnd = conversation.gradientEndColor?.let { Color(it) }
+                                                )
+                                            }
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
                                                 text = name.take(8),
@@ -438,6 +445,11 @@ fun ConversationListScreen(
                                         contactsMap = contactsMap,
                                         isSelected = isSelected,
                                         isSelectionMode = isSelectionMode,
+                                        onAvatarClick = {
+                                            if (conversation.type == "direct") {
+                                                profileClickOnce(conversation.username)
+                                            }
+                                        },
                                         onLongClick = {
                                             if (!isSelectionMode) {
                                                 selectedConversationIds = setOf(conversation.id)
@@ -514,6 +526,7 @@ fun ConversationItem(
     contactsMap: Map<String, String>,
     isSelected: Boolean,
     isSelectionMode: Boolean,
+    onAvatarClick: () -> Unit,
     onLongClick: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -547,7 +560,9 @@ fun ConversationItem(
                 InitialsAvatar(
                     id = displayName,
                     avatarUrl = conversation.avatarUrl,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable { onAvatarClick() },
                     gradientStart = conversation.gradientStartColor?.let { Color(it) },
                     gradientEnd = conversation.gradientEndColor?.let { Color(it) }
                 )

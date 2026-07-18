@@ -63,21 +63,13 @@ class ProfileViewModel(
                     _userProfile.value = cached
                     loadOwnGradients(cached.id)
                     _isLoading.value = false
-                    // No network fetch on open — only mutations refresh own profile.
+                    // Always refresh own profile from network when opening
+                    refreshOwnProfile()
                     return@launch
                 }
                 // First run / empty cache: one network fetch to seed local storage.
                 _isLoading.value = true
-                try {
-                    val user = chatRepository.refreshOwnProfileFromNetwork()
-                    _userProfile.value = user
-                    loadOwnGradients(user.id)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    _errorMessage.value = "Failed to load profile: ${e.localizedMessage}"
-                } finally {
-                    _isLoading.value = false
-                }
+                refreshOwnProfile()
             } else {
                 val username = targetUsername!!
                 // 1) Instant local paint
@@ -91,6 +83,26 @@ class ProfileViewModel(
                 }
                 // 2) Always refresh other users when opening their profile
                 refreshOtherProfile(username)
+            }
+        }
+    }
+
+    /** Explicit network refresh for own profile. */
+    fun refreshOwnProfile() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                val user = chatRepository.refreshOwnProfileFromNetwork()
+                _userProfile.value = user
+                loadOwnGradients(user.id)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                if (_userProfile.value == null) {
+                    _errorMessage.value = "Failed to load profile: ${e.localizedMessage}"
+                }
+            } finally {
+                _isRefreshing.value = false
+                _isLoading.value = false
             }
         }
     }

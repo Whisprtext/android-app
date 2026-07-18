@@ -327,8 +327,8 @@ class MainActivity : ComponentActivity() {
                                         onConversationClick = { convId ->
                                             debouncedNavigator.navigate(Screen.Chat.createRoute(convId))
                                         },
-                                        onProfileClick = {
-                                            debouncedNavigator.navigate(Screen.Profile.createRoute())
+                                        onProfileClick = { username ->
+                                            debouncedNavigator.navigate(Screen.Profile.createRoute(username))
                                         },
                                         onAddContactClick = {
                                             debouncedNavigator.navigate(Screen.ContactDiscovery.route)
