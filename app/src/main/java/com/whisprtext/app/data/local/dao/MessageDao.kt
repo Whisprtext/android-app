@@ -30,6 +30,24 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun getById(id: String): MessageEntity?
 
+    /** Latest message in a conversation for list-preview text (local decrypted store). */
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun getLatestForConversation(conversationId: String): MessageEntity?
+
+    /**
+     * Unread = messages from others that are not yet marked read.
+     * Drives the conversation-list badge.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM messages
+        WHERE conversationId = :conversationId
+          AND senderId != :currentUserId
+          AND syncStatus != 'read'
+        """
+    )
+    suspend fun countUnreadInConversation(conversationId: String, currentUserId: String): Int
+
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun deleteByConversationId(conversationId: String)
 

@@ -1,6 +1,7 @@
 package com.whisprtext.app.ui.screen
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -11,7 +12,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
-import com.whisprtext.app.ui.theme.DynaPuffFontFamily
+import com.whisprtext.app.ui.theme.PoppinsFontFamily
+import com.whisprtext.app.ui.theme.WhisprtextTheme
+import com.whisprtext.app.data.model.AppearanceSettings
 import com.whisprtext.app.ui.viewmodel.AuthState
 import com.whisprtext.app.ui.viewmodel.AuthViewModel
 
@@ -42,34 +45,39 @@ fun AuthScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .imePadding(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(
-                    animationSpec = tween(
-                        durationMillis = 400,
-                        easing = FastOutSlowInEasing
-                    )
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+    WhisprtextTheme(appearanceSettings = AppearanceSettings(presetId = "sunset_gradient")) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            Text(
-                text = "WhisprText",
-                style = MaterialTheme.typography.displaySmall.copy(
-                    color = MaterialTheme.colorScheme.primary,
-                    fontFamily = DynaPuffFontFamily,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                modifier = Modifier.glowShader(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+                    .imePadding(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(
+                            animationSpec = tween(
+                                durationMillis = 400,
+                                easing = FastOutSlowInEasing
+                            )
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "WhisprText",
+                        style = MaterialTheme.typography.displayMedium.copy(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontFamily = PoppinsFontFamily,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        modifier = Modifier.glowShader(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                    )
 
             Text(
                 text = if (isLogin) "Welcome back" else "Create privacy-focused account",
@@ -84,6 +92,7 @@ fun AuthScreen(
                 label = { Text("Username") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -97,6 +106,7 @@ fun AuthScreen(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done
                 ),
+                shape = RoundedCornerShape(24.dp),
                 keyboardActions = KeyboardActions(
                     onDone = {
                         if (username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading) {
@@ -135,7 +145,7 @@ fun AuthScreen(
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 enabled = username.isNotBlank() && password.isNotBlank() && authState !is AuthState.Loading,
-                shape = MaterialTheme.shapes.medium
+                shape = RoundedCornerShape(24.dp)
             ) {
                 AnimatedContent(
                     targetState = authState,
@@ -160,4 +170,6 @@ fun AuthScreen(
             }
         }
     }
+}
+}
 }

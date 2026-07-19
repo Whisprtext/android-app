@@ -18,7 +18,7 @@ import com.whisprtext.app.data.local.entity.UserProfileEntity
         PendingReceiptEntity::class,
         UserProfileEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {

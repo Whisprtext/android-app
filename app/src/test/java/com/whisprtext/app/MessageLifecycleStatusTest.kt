@@ -69,15 +69,12 @@ class MessageLifecycleStatusTest {
 
     @Test
     fun testSendMessageStartsAsPendingAndChangesToSentOnSuccess() = runTest {
-        val serverResponse = MessageDto(
-            id = "msg-server-id",
-            conversationId = "conv-123",
-            senderId = "user-current",
-            senderDeviceId = "dev-1",
-            encryptedContent = "Hello",
-            createdAt = "2026-07-12T12:00:00Z"
-        )
-        whenever(apiClient.sendMessage(any(), any())).thenReturn(serverResponse)
+        kotlinx.coroutines.runBlocking {
+            whenever(preferencesManager.getDeviceId()).thenReturn("dev-1")
+            whenever(conversationDao.getById("conv-123")).thenReturn(
+                ConversationEntity("conv-123", "direct", 1000L, 0, null, null, username = "bob")
+            )
+        }
 
         repository.sendMessage("conv-123", "Hello", "user-current", "dev-1")
         runCurrent()
@@ -89,10 +86,11 @@ class MessageLifecycleStatusTest {
         val localPending = captor.allValues.firstOrNull { it.syncStatus == "pending" }
         assert(localPending != null)
 
-        // 2. Verify it was deleted (temporary ID) and re-inserted as sent
-        verify(messageDao).deleteById(localPending!!.id)
-        val localSent = captor.allValues.firstOrNull { it.id == "msg-server-id" && it.syncStatus == "sent" }
-        assert(localSent != null)
+        // Without SignalKeyManager (no appContext in this unit test), E2EE cannot run
+        // and plaintext fallback is disabled → message is marked failed (not sent in clear).
+        val localFailed = captor.allValues.firstOrNull { it.syncStatus == "failed" }
+        assert(localFailed != null)
+        verify(apiClient, never()).sendMessage(any(), any())
     }
 
     @Test

@@ -57,6 +57,11 @@ object MediaCrypto {
         return cipher.doFinal(ciphertext)
     }
 
+    fun sha256(data: ByteArray): ByteArray {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        return digest.digest(data)
+    }
+
     fun bytesToHex(bytes: ByteArray): String {
         return bytes.joinToString("") { "%02x".format(it) }
     }

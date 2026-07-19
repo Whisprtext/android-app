@@ -18,6 +18,25 @@ interface ConversationDao {
     @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :conversationId")
     suspend fun clearUnreadCount(conversationId: String)
 
+    @Query("UPDATE conversations SET unreadCount = :count WHERE id = :conversationId")
+    suspend fun setUnreadCount(conversationId: String, count: Int)
+
+    @Query(
+        """
+        UPDATE conversations
+        SET lastMessageText = :text,
+            lastMessageTime = :time,
+            unreadCount = :unreadCount
+        WHERE id = :conversationId
+        """
+    )
+    suspend fun updateListMeta(
+        conversationId: String,
+        text: String?,
+        time: Long?,
+        unreadCount: Int
+    )
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(conversation: ConversationEntity): Unit
 

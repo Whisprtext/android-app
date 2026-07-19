@@ -89,12 +89,23 @@ data class ConversationSummaryDto(
     @SerializedName("avatar_url") val avatarUrl: String? = null
 )
 
+/**
+ * Wire envelope for E2EE messages.
+ *
+ * Contract (Android ↔ Go ↔ Postgres):
+ * - encrypted_content: base64(Signal ciphertext) exactly once
+ * - message_type: Signal CiphertextMessage type (2=whisper, 3=prekey)
+ * - sender_device_id / recipient_device_id: device UUIDs
+ * - Backend stores/transports ciphertext only; never encrypts or decrypts
+ */
 data class MessageDto(
     val id: String,
     @SerializedName("conversation_id") val conversationId: String,
     @SerializedName("sender_id") val senderId: String,
     @SerializedName("sender_device_id") val senderDeviceId: String,
+    @SerializedName("recipient_device_id") val recipientDeviceId: String? = null,
     @SerializedName("encrypted_content") val encryptedContent: String,
+    @SerializedName("message_type") val messageType: Int = 0,
     @SerializedName("created_at") val createdAt: String,
     val attachments: List<AttachmentDto>? = null
 )

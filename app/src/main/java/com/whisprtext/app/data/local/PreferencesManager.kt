@@ -31,6 +31,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_DISCOVERABLE_PHONE = stringPreferencesKey("discoverable_by_phone")
         private val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
         private val KEY_DEVICE_NAME = stringPreferencesKey("device_name")
+        private val KEY_DEVICE_ID = stringPreferencesKey("device_id")
         private val KEY_PUSH_TOKEN = stringPreferencesKey("push_token")
         private val KEY_APPEARANCE_SETTINGS = stringPreferencesKey("appearance_settings")
         private val KEY_GRADIENT_START = intPreferencesKey("gradient_start")
@@ -77,6 +78,19 @@ class PreferencesManager(private val context: Context) {
         }
         return newName
     }
+
+    /** Server-assigned device UUID (from login/signup). Used for Signal addressing and E2EE routing. */
+    val deviceId: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_DEVICE_ID]
+    }
+
+    suspend fun saveDeviceId(deviceId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_DEVICE_ID] = deviceId
+        }
+    }
+
+    suspend fun getDeviceId(): String? = deviceId.first()
 
     val userId: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_USER_ID]
@@ -143,7 +157,14 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
-    suspend fun saveSession(token: String, userId: String, username: String, displayName: String? = null, avatarUrl: String? = null) {
+    suspend fun saveSession(
+        token: String,
+        userId: String,
+        username: String,
+        displayName: String? = null,
+        avatarUrl: String? = null,
+        deviceId: String? = null
+    ) {
         context.dataStore.edit { preferences ->
             preferences[KEY_SESSION_TOKEN] = token
             preferences[KEY_USER_ID] = userId
@@ -153,6 +174,9 @@ class PreferencesManager(private val context: Context) {
             }
             if (avatarUrl != null) {
                 preferences[KEY_AVATAR_URL] = avatarUrl
+            }
+            if (!deviceId.isNullOrBlank()) {
+                preferences[KEY_DEVICE_ID] = deviceId
             }
         }
     }
@@ -270,6 +294,18 @@ class PreferencesManager(private val context: Context) {
             preferences.remove(KEY_DISCOVERABLE_USERNAME)
             preferences.remove(KEY_DISCOVERABLE_PHONE)
             preferences.remove(KEY_LAST_SYNC_TIME)
+            // Keep KEY_DEVICE_NAME and KEY_DEVICE_ID across re-login on same install so
+            // local Signal identity stays aligned with the same logical device when possible.
         }
+    }
+
+    suspend fun getSecureValue(key: String): String? {
+        val prefKey = stringPreferencesKey(key)
+        return context.dataStore.data.map { it[prefKey] }.first()
+    }
+
+    suspend fun saveSecureValue(key: String, value: String) {
+        val prefKey = stringPreferencesKey(key)
+        context.dataStore.edit { it[prefKey] = value }
     }
 }

@@ -20,19 +20,30 @@ class ApiClient(
     private val baseUrl: String,
     private val preferencesManager: PreferencesManager
 ) {
-    private val client = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            val token = runBlocking { preferencesManager.sessionToken.first() }
-            val request = chain.request().newBuilder()
-            if (!token.isNullOrEmpty()) {
-                request.addHeader("Authorization", "Bearer $token")
-            }
-            chain.proceed(request.build())
+    private val authInterceptor = Interceptor { chain ->
+        val token = runBlocking { preferencesManager.sessionToken.first() }
+        val request = chain.request().newBuilder()
+        if (!token.isNullOrEmpty()) {
+            request.addHeader("Authorization", "Bearer $token")
         }
+        chain.proceed(request.build())
+    }
+
+    private val client = OkHttpClient.Builder()
+        .addInterceptor(authInterceptor)
+        // Key registration + remote Neon can exceed default 10s under load
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
     // Separate client without auth interceptor for direct S3/R2 presigned URL requests
-    private val storageClient = OkHttpClient.Builder().build()
+    private val storageClient = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     private val gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
@@ -109,16 +120,24 @@ class ApiClient(
         return executeRequest(request, type)
     }
 
+    suspend fun sendMessage(conversationId: String, content: String): MessageDto {
+        return sendMessage(conversationId, content, null, null, 0, null, null)
+    }
+
     suspend fun sendMessage(
         conversationId: String,
         content: String,
         messageId: String? = null,
+        recipientDeviceId: String? = null,
+        messageType: Int = 0,
         attachment: AttachmentDto? = null,
         attachments: List<AttachmentDto>? = null
     ): MessageDto {
         val params = mutableMapOf<String, Any>()
         params["content"] = content
         if (messageId != null) params["id"] = messageId
+        if (recipientDeviceId != null) params["recipient_device_id"] = recipientDeviceId
+        if (messageType != 0) params["message_type"] = messageType
         if (attachment != null) params["attachment"] = attachment
         if (attachments != null) params["attachments"] = attachments
 
@@ -391,6 +410,123 @@ class ApiClient(
                 throw IOException("Unexpected code ${response.code} during media download")
             }
             response.body?.bytes() ?: throw IOException("Empty media download body")
+        }
+    }
+
+    suspend fun executePostRaw(path: String, bodyMap: Any): Boolean {
+        val json = gson.toJson(bodyMap)
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/api/$path")
+            .post(body)
+            .build()
+        return executeStatusRequest(request)
+    }
+
+    suspend fun executeGetRaw(path: String): String? {
+        val request = Request.Builder()
+            .url("$baseUrl/api/$path")
+            .get()
+            .build()
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) null else response.body?.string()
+            }
+        }
+    }
+
+    /**
+     * Register this device's Signal public keys.
+     * Server path: POST /api/keys/register (device id taken from auth session).
+     * Uses a longer call timeout because the payload includes a batch of one-time prekeys.
+     */
+    suspend fun registerSignalKeys(bodyMap: Any): Boolean {
+        val json = gson.toJson(bodyMap)
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/api/keys/register")
+            .post(body)
+            .build()
+        return withContext(Dispatchers.IO) {
+            // Explicit per-call timeout override (registration is bulkier than chat)
+            val longCallClient = client.newBuilder()
+                .callTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            longCallClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    android.util.Log.e(
+                        "SignalE2EE",
+                        "keys_register_http status=${response.code} bodyLen=${response.body?.contentLength() ?: -1}"
+                    )
+                }
+                response.isSuccessful
+            }
+        }
+    }
+
+    /**
+     * Fetch prekey bundles for all devices of a user (identity + signed prekey only).
+     * Does not claim one-time prekeys. Server path: GET /api/keys/users/{userId}
+     */
+    suspend fun getPreKeyBundles(userId: String): String? {
+        val request = Request.Builder()
+            .url("$baseUrl/api/keys/users/$userId")
+            .get()
+            .build()
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) null else response.body?.string()
+            }
+        }
+    }
+
+    data class ClaimedOneTimePreKey(
+        @com.google.gson.annotations.SerializedName("id") val id: String = "",
+        @com.google.gson.annotations.SerializedName("device_id") val deviceId: String = "",
+        @com.google.gson.annotations.SerializedName("prekey_id") val preKeyId: Int = 0,
+        @com.google.gson.annotations.SerializedName("public_key") val publicKey: String = ""
+    )
+
+    /**
+     * Atomically claim one-time prekeys for the given device IDs.
+     * Server path: POST /api/keys/claim
+     * Returns map deviceId -> claimed key (missing entry if none left).
+     */
+    suspend fun claimOneTimePreKeys(deviceIds: List<String>): Map<String, ClaimedOneTimePreKey> {
+        if (deviceIds.isEmpty()) return emptyMap()
+        val json = gson.toJson(mapOf("device_ids" to deviceIds))
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/api/keys/claim")
+            .post(body)
+            .build()
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    android.util.Log.e("SignalE2EE", "otpk_claim_http status=${response.code}")
+                    return@use emptyMap()
+                }
+                val bodyStr = response.body?.string() ?: return@use emptyMap()
+                val type = object : com.google.gson.reflect.TypeToken<Map<String, ClaimedOneTimePreKey>>() {}.type
+                try {
+                    gson.fromJson<Map<String, ClaimedOneTimePreKey>>(bodyStr, type) ?: emptyMap()
+                } catch (e: Exception) {
+                    android.util.Log.e("SignalE2EE", "otpk_claim_parse_failed ${e.message}")
+                    emptyMap()
+                }
+            }
+        }
+    }
+
+    /** Ensure device UUID is known (e.g. after app update while already logged in). */
+    suspend fun fetchMeDeviceId(): String? {
+        return try {
+            val me = getMe()
+            me.device.id
+        } catch (_: Exception) {
+            null
         }
     }
 

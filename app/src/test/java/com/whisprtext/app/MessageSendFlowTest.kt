@@ -4,15 +4,16 @@ import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.dao.ConversationDao
 import com.whisprtext.app.data.local.dao.MessageDao
 import com.whisprtext.app.data.local.dao.PendingReceiptDao
+import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.remote.ApiClient
-import com.whisprtext.app.data.remote.model.MessageDto
 import com.whisprtext.app.data.repository.ChatRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mockito.times
+import org.mockito.Mockito.atLeastOnce
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
@@ -44,35 +45,31 @@ class MessageSendFlowTest {
         kotlinx.coroutines.runBlocking {
             whenever(pendingReceiptDao.getAll()).thenReturn(emptyList())
             whenever(messageDao.getMessagesBySyncStatus(any())).thenReturn(emptyList())
+            whenever(preferencesManager.getDeviceId()).thenReturn("dev-1")
+            whenever(conversationDao.getById(any())).thenReturn(
+                ConversationEntity("conv-1", "direct", 1000L, 0, null, null, username = "bob")
+            )
         }
+        // No appContext → SignalKeyManager unavailable; E2EE required so send must not fall back to plaintext
         repository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
 
     @Test
     fun testSendMessageFlowOptimisticAndFinalPersistence() = runTest {
-        val dummyResponseDto = MessageDto(
-            id = "final-msg-123",
-            conversationId = "conv-1",
-            senderId = "user-123",
-            senderDeviceId = "dev-1",
-            encryptedContent = "Hey there!",
-            createdAt = "2026-07-12T12:00:00Z"
-        )
-        whenever(apiClient.sendMessage("conv-1", "Hey there!")).thenReturn(dummyResponseDto)
-
         repository.sendMessage("conv-1", "Hey there!", "user-123", "dev-1")
 
         val optCaptor = argumentCaptor<MessageEntity>()
-        verify(messageDao, times(2)).insert(optCaptor.capture())
+        verify(messageDao, atLeastOnce()).insert(optCaptor.capture())
 
-        val optMessage = optCaptor.firstValue
-        assert(optMessage.encryptedContent == "Hey there!")
-        assert(optMessage.syncStatus == "pending")
+        val optMessage = optCaptor.allValues.first { it.syncStatus == "pending" }
+        assert(optMessage.encryptedContent == "Hey there!") // LocalEncryptor disabled without appContext
+        assert(optMessage.decryptionStatus == "decrypted")
 
-        verify(messageDao).deleteById(optMessage.id)
+        // Without SignalKeyManager, plaintext fallback is forbidden → ends failed
+        val failed = optCaptor.allValues.any { it.syncStatus == "failed" }
+        assert(failed)
 
-        val finalMessage = optCaptor.secondValue
-        assert(finalMessage.id == "final-msg-123")
-        assert(finalMessage.syncStatus == "sent")
+        // Must never POST plaintext content over the wire
+        verify(apiClient, never()).sendMessage(any(), any())
     }
 }

@@ -110,63 +110,42 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 return@runBlocking
             }
 
-            // Build and persist the message entity
-            val entity = MessageEntity(
-                id = messageId,
-                conversationId = conversationId,
-                senderId = senderId,
-                senderDeviceId = "",
-                encryptedContent = content,
-                createdAt = createdAtMillis,
-                syncStatus = "delivered"
-            )
-
             try {
-                // Upsert the message (avoids duplicates if WS and FCM both arrive)
+                // Sync delta to fetch the real encrypted message and decrypt/store it locally
+                repo.syncDelta()
+
                 val db = app.database
-                val existing = db.messageDao().getById(messageId)
-                if (existing == null) {
-                    db.messageDao().insert(entity)
-                    Log.d(TAG, "FCM message persisted: $messageId")
-                } else {
-                    Log.d(TAG, "FCM message already exists locally: $messageId")
-                }
-
-                // Update conversation last message preview
                 val conv = db.conversationDao().getById(conversationId)
-                if (conv != null) {
-                    db.conversationDao().insert(
-                        conv.copy(
-                            lastMessageText = content,
-                            lastMessageTime = createdAtMillis
+                val latestMsg = db.messageDao().getById(messageId)
+
+                // CRITICAL: only ACK delivered/read after successful local decrypt.
+                // Otherwise sender sees triple-tick while receiver shows "Unable to decrypt".
+                val decryptedOk = latestMsg != null &&
+                    latestMsg.decryptionStatus == "decrypted" &&
+                    !latestMsg.isDecryptionFailed
+
+                if (decryptedOk) {
+                    val isViewingThisChat = repo.isAppInForeground &&
+                            repo.activeConversationId == conversationId
+                    val receiptStatus = if (isViewingThisChat) "read" else "delivered"
+                    repo.sendReceiptReliably(messageId, conversationId, receiptStatus)
+
+                    if (!isViewingThisChat) {
+                        val senderName = conv?.title ?: conv?.username ?: "New message"
+                        val displayMsgText = latestMsg.decryptedContent
+                            .takeIf { it.isNotBlank() && !latestMsg.isDecryptionFailed }
+                            ?: "New message received."
+                        app.notificationHelper.showMessageNotification(
+                            conversationId = conversationId,
+                            senderName = senderName,
+                            messageText = displayMsgText
                         )
-                    )
+                    }
                 } else {
-                    // Conversation not cached yet – trigger a sync
-                    repo.syncConversations()
-                }
-
-                // Use sendReceiptReliably so the receipt is queued in Room and retried
-                // if this HTTP call fails (e.g. brief connectivity loss while waking from sleep).
-                val isViewingThisChat = repo.isAppInForeground &&
-                        repo.activeConversationId == conversationId
-                val receiptStatus = if (isViewingThisChat) "read" else "delivered"
-
-                repo.sendReceiptReliably(messageId, conversationId, receiptStatus)
-                Log.d(TAG, "Receipt queued for message $messageId: $receiptStatus")
-
-                // Show a local notification if the app is backgrounded or not viewing this chat
-                if (!isViewingThisChat) {
-                    db.conversationDao().incrementUnreadCount(conversationId)
-                    val senderName = conv?.title ?: conv?.username ?: "New message"
-                    app.notificationHelper.showMessageNotification(
-                        conversationId = conversationId,
-                        senderName = senderName,
-                        messageText = content
-                    )
+                    Log.e(TAG, "FCM message not decrypted — withholding receipt messageId=$messageId")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to persist FCM message: $messageId", e)
+                Log.e(TAG, "Failed to process FCM message: $messageId", e)
             }
         }
     }

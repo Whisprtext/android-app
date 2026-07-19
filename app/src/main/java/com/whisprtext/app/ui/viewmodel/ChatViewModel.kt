@@ -90,6 +90,10 @@ class ChatViewModel(
 
     init {
         chatRepository.activeConversationId = conversationId
+        // Opening a chat clears the unread badge immediately
+        viewModelScope.launch {
+            chatRepository.markConversationAsRead(conversationId)
+        }
         viewModelScope.launch {
             preferencesManager.userId.collect { id ->
                 _currentUserId.value = id ?: ""
@@ -146,7 +150,8 @@ class ChatViewModel(
         viewModelScope.launch {
             val senderId = _currentUserId.value
             if (senderId.isNotBlank()) {
-                chatRepository.sendMessage(conversationId, content, senderId, "android-device")
+                // Device UUID is resolved inside ChatRepository from PreferencesManager
+                chatRepository.sendMessage(conversationId, content, senderId, "")
             }
         }
     }
@@ -178,7 +183,7 @@ class ChatViewModel(
                         uriString = uriString,
                         mimeType = mimeType,
                         senderId = senderId,
-                        senderDeviceId = "android-device",
+                        senderDeviceId = "",
                         content = content,
                         extraUris = extraUris
                     )

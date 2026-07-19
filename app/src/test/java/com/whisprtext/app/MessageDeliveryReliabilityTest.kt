@@ -91,7 +91,7 @@ class MessageDeliveryReliabilityTest {
 
     @Test
     fun sendReceiptReliably_leavesEntryOnHttpFailure() = runTest {
-        whenever(apiClient.sendReceipt(any(), any())).thenThrow(IOException("offline"))
+        whenever(apiClient.sendReceipt(any(), any())).thenThrow(RuntimeException("offline"))
 
         repository.sendReceiptReliably("msg-2", "conv-1", "delivered")
 
@@ -135,7 +135,7 @@ class MessageDeliveryReliabilityTest {
             id = "pe-2", messageId = "msg-11", conversationId = "conv-1", status = "delivered"
         )
         whenever(pendingReceiptDao.getAll()).thenReturn(listOf(entry))
-        whenever(apiClient.sendReceipt(any(), any())).thenThrow(IOException("timeout"))
+        whenever(apiClient.sendReceipt(any(), any())).thenThrow(RuntimeException("timeout"))
 
         repository.syncReceipts()
 

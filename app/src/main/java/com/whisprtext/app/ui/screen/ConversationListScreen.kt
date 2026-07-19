@@ -34,6 +34,7 @@ import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.ui.component.InitialsAvatar
 import com.whisprtext.app.ui.component.StatusAvatar
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import com.whisprtext.app.ui.theme.DynaPuffFontFamily
 import com.whisprtext.app.ui.theme.Motion
 import com.whisprtext.app.ui.viewmodel.ConversationsViewModel
@@ -569,22 +570,50 @@ fun ConversationItem(
             )
         },
         supportingContent = {
+            val preview = conversation.lastMessageText?.takeIf { it.isNotBlank() } ?: "No messages yet"
+            val hasUnread = conversation.unreadCount > 0
             Text(
-                text = conversation.lastMessageText ?: "No messages yet",
+                text = preview,
                 maxLines = 1,
-                fontSize = 14.sp
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 14.sp,
+                fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (hasUnread) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
         },
         trailingContent = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
                 val timeStr = formatTime(conversation.lastMessageTime)
-                Text(timeStr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (conversation.unreadCount > 0 && !isSelectionMode) {
+                val hasUnread = conversation.unreadCount > 0
+                Text(
+                    text = timeStr,
+                    fontSize = 12.sp,
+                    fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (hasUnread) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                if (hasUnread && !isSelectionMode) {
                     Badge(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     ) {
-                        Text(conversation.unreadCount.toString())
+                        val label = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString()
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

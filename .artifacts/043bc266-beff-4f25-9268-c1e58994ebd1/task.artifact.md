@@ -1,0 +1,6 @@
+- [x] Update `AuthScreen.kt` to use Poppins font for the logo
+- [x] Force "Whispr Sunset" theme in `AuthScreen.kt`
+- [x] Add `Surface` for proper background color in `AuthScreen.kt`
+- [x] Make "WhisprText" logo bigger (displayMedium)
+- [x] Make input boxes and buttons rounded (24.dp)
+- [x] Verify build and UI changes

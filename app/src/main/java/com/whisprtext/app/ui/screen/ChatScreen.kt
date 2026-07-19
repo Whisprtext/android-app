@@ -1033,8 +1033,19 @@ fun MessageBubble(
         }
     }
 
-    val parsedContent = remember(message.encryptedContent) {
-        MarkdownParser.parse(message.encryptedContent, hideMarkers = true)
+    val displayText = remember(message.decryptedContent, message.decryptionStatus) {
+        val raw = message.decryptedContent
+        when {
+            message.decryptionStatus == "failed" ||
+                message.isDecryptionFailed ->
+                com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+            com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(raw) ->
+                com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+            else -> raw
+        }
+    }
+    val parsedContent = remember(displayText) {
+        MarkdownParser.parse(displayText, hideMarkers = true)
     }
 
     val timeStr = remember(message.createdAt) {

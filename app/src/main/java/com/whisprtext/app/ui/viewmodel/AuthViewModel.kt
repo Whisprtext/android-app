@@ -39,7 +39,8 @@ class AuthViewModel(
                     response.user.id,
                     response.user.username,
                     response.user.displayName,
-                    response.user.avatarUrl
+                    response.user.avatarUrl,
+                    deviceId = response.device.id
                 )
                 preferencesManager.saveOwnProfile(
                     userId = response.user.id,
@@ -75,7 +76,8 @@ class AuthViewModel(
                     response.user.id,
                     response.user.username,
                     response.user.displayName,
-                    response.user.avatarUrl
+                    response.user.avatarUrl,
+                    deviceId = response.device.id
                 )
                 preferencesManager.saveOwnProfile(
                     userId = response.user.id,

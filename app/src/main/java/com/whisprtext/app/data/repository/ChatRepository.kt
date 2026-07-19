@@ -36,7 +36,7 @@ class ChatRepository @JvmOverloads constructor(
     private val webSocketManager: WebSocketManager,
     private val networkMonitor: NetworkMonitor,
     private val preferencesManager: PreferencesManager,
-    private val context: Context? = null,
+    private val appContext: Context? = null,
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
 ) {
     private val conversationDao = database.conversationDao()
@@ -46,13 +46,19 @@ class ChatRepository @JvmOverloads constructor(
     private val scope = CoroutineScope(ioDispatcher)
     private var cachedUserId: String? = null
 
+    val signalKeyManager: com.whisprtext.app.crypto.SignalKeyManager? by lazy {
+        if (appContext != null && preferencesManager != null) {
+            com.whisprtext.app.crypto.SignalKeyManager(appContext, apiClient, preferencesManager)
+        } else null
+    }
+
     /**
      * In-memory map for the edge case where a receipt update (from the server) arrives
      * *before* the corresponding message has been written to Room. The receipt is held
      * here and applied when the message is eventually inserted by upsertMessage().
      */
     private val pendingReceipts = ConcurrentHashMap<String, String>()
-    private val notificationHelper = context?.let { NotificationHelper(it) }
+    private val notificationHelper = appContext?.let { NotificationHelper(it) }
 
     /** Maximum number of HTTP delivery attempts before a pending receipt is abandoned. */
     private val MAX_RECEIPT_ATTEMPTS = 10
@@ -61,10 +67,41 @@ class ChatRepository @JvmOverloads constructor(
     var isAppInForeground = false
 
     init {
+        if (appContext == null) {
+            com.whisprtext.app.crypto.LocalEncryptor.isEncryptionEnabled = false
+        }
         scope.launch {
             try {
+                var lastRegisteredFor: String? = null
                 preferencesManager?.userId?.collect { id ->
                     cachedUserId = id
+                    if (!id.isNullOrEmpty() && appContext != null) {
+                        // Heal missing device UUID after app updates (session without device id)
+                        var deviceId = preferencesManager.getDeviceId()
+                        if (deviceId.isNullOrBlank()) {
+                            try {
+                                deviceId = apiClient.fetchMeDeviceId()
+                                if (!deviceId.isNullOrBlank()) {
+                                    preferencesManager.saveDeviceId(deviceId)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("SignalE2EE", "device_id_heal_failed ${e.message?.take(60)}")
+                            }
+                        }
+                        if (!deviceId.isNullOrBlank()) {
+                            val key = "$id:$deviceId"
+                            if (key == lastRegisteredFor) return@collect
+                            try {
+                                signalKeyManager?.registerDeviceKeysIfNecessary(id, deviceId)
+                                lastRegisteredFor = key
+                            } catch (e: Exception) {
+                                android.util.Log.e(
+                                    "SignalE2EE",
+                                    "key_register_error reason=${e.javaClass.simpleName}:${e.message?.take(80)}"
+                                )
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 // Ignore background coroutine errors in test mocks
@@ -78,25 +115,29 @@ class ChatRepository @JvmOverloads constructor(
                     val currentUserId = cachedUserId ?: preferencesManager?.userId?.first() ?: ""
                     when (event) {
                         is WebSocketEvent.NewMessage -> {
+                            val localDeviceId = try {
+                                preferencesManager.getDeviceId().orEmpty()
+                            } catch (_: Exception) {
+                                ""
+                            }
+
+                            // E2EE envelopes are encrypted for one device only. Ignore any
+                            // envelope not addressed to this device (wrong ciphertext → false
+                            // "Unable to decrypt" + premature read receipts / triple-tick).
+                            val targetDevice = event.message.recipientDeviceId
+                            if (!targetDevice.isNullOrBlank() &&
+                                localDeviceId.isNotBlank() &&
+                                targetDevice != localDeviceId
+                            ) {
+                                android.util.Log.d(
+                                    "SignalE2EE",
+                                    "skip_foreign_envelope messageId=${event.message.id} target=$targetDevice local=$localDeviceId"
+                                )
+                                return@collect
+                            }
+
                             val isCurrentChat = isAppInForeground &&
                                     activeConversationId == event.message.conversationId
-
-                            if (event.message.senderId != currentUserId) {
-                                // Reliably report delivery/read status via HTTP, not just WS.
-                                // WS call is still fired for real-time feedback but is not required.
-                                val receiptStatus = if (isCurrentChat) "read" else "delivered"
-                                sendReceiptReliably(
-                                    messageId = event.message.id,
-                                    conversationId = event.message.conversationId,
-                                    status = receiptStatus,
-                                )
-                                // Best-effort real-time WS notification (non-blocking).
-                                if (isCurrentChat) {
-                                    webSocketManager?.markMessageRead(event.message.id)
-                                } else {
-                                    webSocketManager?.markMessageDelivered(event.message.id)
-                                }
-                            }
 
                             val entityStatus = when {
                                 event.message.senderId == currentUserId -> "sent"
@@ -104,29 +145,58 @@ class ChatRepository @JvmOverloads constructor(
                                 else -> "delivered"
                             }
 
-                            upsertMessage(event.message.toEntity(entityStatus))
+                            val entity = event.message.toEntity(entityStatus)
 
-                            val conv = conversationDao.getById(event.message.conversationId)
-                            if (conv != null) {
-                                val updatedConv = conv.copy(
-                                    lastMessageText = event.message.encryptedContent,
-                                    lastMessageTime = event.message.createdAt.toEpochMillis()
+                            // Never ACK or treat decrypt failure as a normal delivered/read message.
+                            if (entity.isDecryptionFailed || entity.decryptionStatus == "failed") {
+                                android.util.Log.e(
+                                    "SignalE2EE",
+                                    "skip_failed_decrypt_no_receipt messageId=${event.message.id} type=${event.message.messageType}"
                                 )
-                                conversationDao.insert(updatedConv)
-                            } else {
-                                scope.launch {
-                                    syncConversations()
+                                val existing = messageDao.getById(entity.id)
+                                if (existing == null || existing.decryptionStatus != "decrypted") {
+                                    // Persist with failed status, never as delivered/read
+                                    upsertMessage(entity.copy(syncStatus = "failed"))
+                                    refreshConversationListMeta(event.message.conversationId)
+                                }
+                                return@collect
+                            }
+
+                            upsertMessage(entity)
+
+                            // Receipts only after successful local decrypt
+                            if (event.message.senderId != currentUserId) {
+                                val receiptStatus = if (isCurrentChat) "read" else "delivered"
+                                sendReceiptReliably(
+                                    messageId = event.message.id,
+                                    conversationId = event.message.conversationId,
+                                    status = receiptStatus,
+                                )
+                                if (isCurrentChat) {
+                                    webSocketManager?.markMessageRead(event.message.id)
+                                } else {
+                                    webSocketManager?.markMessageDelivered(event.message.id)
                                 }
                             }
 
+                            var conv = conversationDao.getById(event.message.conversationId)
+                            if (conv == null) {
+                                syncConversations()
+                                conv = conversationDao.getById(event.message.conversationId)
+                            }
+
+                            refreshConversationListMeta(event.message.conversationId)
+
                             if (event.message.senderId != currentUserId && !isCurrentChat) {
-                                conversationDao.incrementUnreadCount(event.message.conversationId)
                                 val senderName = conv?.title ?: conv?.username ?: "New Message"
+                                val notifText = previewTextForList(entity) ?: "New message"
                                 notificationHelper?.showMessageNotification(
                                     conversationId = event.message.conversationId,
                                     senderName = senderName,
-                                    messageText = event.message.encryptedContent
+                                    messageText = notifText
                                 )
+                            } else if (isCurrentChat && event.message.senderId != currentUserId) {
+                                markConversationAsRead(event.message.conversationId)
                             }
                         }
                         is WebSocketEvent.Ack -> {
@@ -199,20 +269,42 @@ class ChatRepository @JvmOverloads constructor(
             val remoteSummaries = apiClient.getConversations()
             if (remoteSummaries.isEmpty()) return
 
+            val currentUserId = cachedUserId ?: preferencesManager.userId.first().orEmpty()
             val entities = remoteSummaries.map { summary ->
                 val base = summary.toEntity()
                 val existingLocal = conversationDao.getById(summary.id)
                 // Prefer richer locally cached avatar if server returns empty.
                 val cachedProfile = summary.username?.let { userProfileDao.getByUsername(it) }
+                // Server last_message is ciphertext — always prefer local decrypted preview.
+                val localLatest = messageDao.getLatestForConversation(summary.id)
+                val previewText = resolveConversationPreview(
+                    localLatest = localLatest,
+                    existingPreview = existingLocal?.lastMessageText,
+                    remotePlaceholder = base.lastMessageText
+                )
+                val previewTime = localLatest?.createdAt
+                    ?: base.lastMessageTime
+                    ?: existingLocal?.lastMessageTime
+                // Unread badge: prefer count of local unread messages; fall back to server then local cache
+                val localUnread = if (currentUserId.isNotBlank()) {
+                    messageDao.countUnreadInConversation(summary.id, currentUserId)
+                } else {
+                    0
+                }
+                val unread = when {
+                    localLatest != null || localUnread > 0 -> localUnread
+                    existingLocal != null -> existingLocal.unreadCount
+                    else -> summary.unreadCount
+                }
                 base.copy(
                     avatarUrl = summary.avatarUrl
                         ?: existingLocal?.avatarUrl
                         ?: cachedProfile?.avatarUrl,
                     gradientStartColor = existingLocal?.gradientStartColor ?: base.gradientStartColor,
                     gradientEndColor = existingLocal?.gradientEndColor ?: base.gradientEndColor,
-                    unreadCount = existingLocal?.unreadCount ?: base.unreadCount,
-                    lastMessageText = base.lastMessageText ?: existingLocal?.lastMessageText,
-                    lastMessageTime = base.lastMessageTime ?: existingLocal?.lastMessageTime
+                    unreadCount = unread.coerceAtLeast(0),
+                    lastMessageText = previewText,
+                    lastMessageTime = previewTime
                 )
             }
             conversationDao.insertAll(entities)
@@ -222,50 +314,254 @@ class ChatRepository @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Conversation list must show device-local plaintext, never transport ciphertext.
+     */
+    private fun resolveConversationPreview(
+        localLatest: MessageEntity?,
+        existingPreview: String?,
+        remotePlaceholder: String?
+    ): String? {
+        val fromLocal = localLatest?.let { previewTextForList(it) }
+        if (fromLocal != null) return fromLocal
+
+        val fromExisting = existingPreview?.takeIf { it.isNotBlank() && !isPreviewPlaceholder(it) }
+        if (fromExisting != null) return fromExisting
+
+        // Do not surface server ciphertext placeholders
+        if (remotePlaceholder != null && !isPreviewPlaceholder(remotePlaceholder) &&
+            !com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(remotePlaceholder)
+        ) {
+            return remotePlaceholder
+        }
+        return null
+    }
+
+    private fun isPreviewPlaceholder(text: String): Boolean {
+        return text == "🔒 Encrypted message" ||
+            text == "Encrypted message" ||
+            text == com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED ||
+            text == "[Decryption failed]" ||
+            com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(text)
+    }
+
+    /** Plaintext (or safe label) for conversation-list preview from a local message row. */
+    private fun previewTextForList(message: MessageEntity): String? {
+        if (message.isDecryptionFailed) return null
+        val text = message.decryptedContent
+        if (text.isBlank() || isPreviewPlaceholder(text)) {
+            // Media-only
+            if (!message.attachmentUrl.isNullOrEmpty() || message.sizeBytes != null) {
+                return when {
+                    message.mimeType?.startsWith("image/") == true -> "Photo"
+                    message.mimeType?.startsWith("video/") == true -> "Video"
+                    else -> "Attachment"
+                }
+            }
+            return null
+        }
+        if (text == "[Media]") {
+            return when {
+                message.mimeType?.startsWith("image/") == true -> "Photo"
+                message.mimeType?.startsWith("video/") == true -> "Video"
+                else -> "Attachment"
+            }
+        }
+        return text
+    }
+
+    /**
+     * Recompute last-message preview + unread badge from the local message DB.
+     * Source of truth for the conversation list (not server ciphertext / stale unread).
+     */
+    suspend fun refreshConversationListMeta(conversationId: String) {
+        val conv = conversationDao.getById(conversationId) ?: return
+        val currentUserId = cachedUserId ?: preferencesManager.userId.first().orEmpty()
+        val latest = messageDao.getLatestForConversation(conversationId)
+        val preview = latest?.let { previewTextForList(it) } ?: conv.lastMessageText?.takeIf {
+            !isPreviewPlaceholder(it)
+        }
+        val time = latest?.createdAt ?: conv.lastMessageTime
+        val unread = if (currentUserId.isBlank()) {
+            conv.unreadCount
+        } else {
+            messageDao.countUnreadInConversation(conversationId, currentUserId)
+        }
+        conversationDao.updateListMeta(
+            conversationId = conversationId,
+            text = preview,
+            time = time,
+            unreadCount = unread.coerceAtLeast(0)
+        )
+    }
+
     suspend fun syncMessages(conversationId: String) {
         // No-op to prevent message backfill from cloud history.
     }
 
 
+    suspend fun getOrResolveUserId(username: String): String {
+        val existing = userProfileDao.getByUsername(username)
+        if (existing != null && !existing.id.startsWith("pending_")) {
+            return existing.id
+        }
+        return try {
+            val userDto = apiClient.searchUserByUsername(username)
+            val resolvedEntity = UserProfileEntity.fromUserDto(userDto, isSelf = false)
+            userProfileDao.upsert(resolvedEntity)
+            userDto.id
+        } catch (e: Exception) {
+            existing?.id ?: "pending_$username"
+        }
+    }
+
     suspend fun sendMessage(conversationId: String, content: String, senderId: String, senderDeviceId: String) {
+        val resolvedDeviceId = preferencesManager.getDeviceId()
+            ?: senderDeviceId.takeIf { it.isNotBlank() && it != "android-device" }
+            ?: ""
         val tempId = UUID.randomUUID().toString()
+        val locallyEncrypted = com.whisprtext.app.crypto.LocalEncryptor.encrypt(content)
         val localMsg = MessageEntity(
             id = tempId,
             conversationId = conversationId,
             senderId = senderId,
-            senderDeviceId = senderDeviceId,
-            encryptedContent = content,
+            senderDeviceId = resolvedDeviceId,
+            encryptedContent = locallyEncrypted,
             createdAt = System.currentTimeMillis(),
-            syncStatus = "pending"
+            syncStatus = "pending",
+            decryptionStatus = "decrypted"
         )
         messageDao.insert(localMsg)
 
-        // Optimistically update conversation last message details
-        val conv = conversationDao.getById(conversationId)
-        if (conv != null) {
-            conversationDao.insert(conv.copy(
-                lastMessageText = content,
-                lastMessageTime = localMsg.createdAt
-            ))
-        }
+        refreshConversationListMeta(conversationId)
 
         try {
-            val response = apiClient.sendMessage(conversationId, content)
-            messageDao.deleteById(tempId)
-            upsertMessage(response.toEntity("sent"))
+            // E2EE required — no plaintext fallback
+            val response = sendE2EEMessage(conversationId, tempId, content)
 
-            // Update conversation with exact server timestamp
-            val updatedConv = conversationDao.getById(conversationId)
-            if (updatedConv != null) {
-                conversationDao.insert(updatedConv.copy(
-                    lastMessageText = content,
-                    lastMessageTime = response.createdAt.toEpochMillis()
-                ))
-            }
+            // Keep sender-local plaintext; never try to decrypt recipient-targeted ciphertext
+            messageDao.deleteById(tempId)
+            upsertMessage(
+                response.toEntityForSender(
+                    status = "sent",
+                    knownPlaintext = content,
+                    localDeviceId = resolvedDeviceId
+                )
+            )
+            refreshConversationListMeta(conversationId)
         } catch (e: Exception) {
             e.printStackTrace()
             messageDao.insert(localMsg.copy(syncStatus = "failed"))
+            refreshConversationListMeta(conversationId)
         }
+    }
+
+    private suspend fun sendE2EEMessage(
+        conversationId: String,
+        messageId: String,
+        content: String,
+        attachment: com.whisprtext.app.data.remote.model.AttachmentDto? = null,
+        attachments: List<com.whisprtext.app.data.remote.model.AttachmentDto>? = null
+    ): com.whisprtext.app.data.remote.model.MessageDto {
+        val skm = signalKeyManager
+            ?: throw IllegalStateException("SignalKeyManager unavailable — cannot send without E2EE")
+        val conv = conversationDao.getById(conversationId) ?: throw IllegalStateException("Conversation not found")
+        val recipientUsername = conv.username ?: throw IllegalStateException("Recipient username not found")
+        val recipientUserId = getOrResolveUserId(recipientUsername)
+        val senderId = cachedUserId ?: preferencesManager.userId.first() ?: ""
+        var senderDeviceId = preferencesManager.getDeviceId()
+        if (senderDeviceId.isNullOrBlank()) {
+            senderDeviceId = apiClient.fetchMeDeviceId()
+            if (!senderDeviceId.isNullOrBlank()) {
+                preferencesManager.saveDeviceId(senderDeviceId)
+            }
+        }
+        if (senderDeviceId.isNullOrBlank()) {
+            throw IllegalStateException("Local device id missing — re-login required for E2EE")
+        }
+
+        // Ensure our keys are registered before sending
+        skm.registerDeviceKeysIfNecessary(senderId, senderDeviceId)
+
+        // List only (no OTPK claim). OTPK is claimed inside encrypt when a new session is built.
+        val recipientBundles = skm.fetchPreKeyBundles(recipientUserId)
+        if (recipientBundles.isEmpty()) {
+            throw IllegalStateException("Recipient has no registered Signal devices")
+        }
+
+        // Multi-device self-sync: list our other devices (also no OTPK claim here)
+        val ownBundles = try {
+            skm.fetchPreKeyBundles(senderId).filter { it.deviceId != senderDeviceId }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        val allTargets = recipientBundles + ownBundles
+        val recipientDeviceIds = recipientBundles.map { it.deviceId }.toSet()
+
+        val gson = com.google.gson.Gson()
+        val payloadAttachments = (listOfNotNull(attachment) + (attachments ?: emptyList())).map {
+            com.whisprtext.app.crypto.SignalKeyManager.AttachmentPayloadDto(
+                objectKey = it.fileUrl,
+                attachmentKey = it.encryptedKey ?: "",
+                nonce = "",
+                digest = "",
+                mimeType = it.mimeType,
+                sizeBytes = it.sizeBytes
+            )
+        }
+        val payload = com.whisprtext.app.crypto.SignalKeyManager.DecryptedPayload(
+            text = content,
+            attachments = payloadAttachments.ifEmpty { null }
+        )
+        val payloadStr = gson.toJson(payload)
+
+        val sanitizedAttachment = attachment?.copy(encryptedKey = null)
+        val sanitizedAttachments = attachments?.map { it.copy(encryptedKey = null) }
+
+        var primaryResponse: com.whisprtext.app.data.remote.model.MessageDto? = null
+        var sentAny = false
+        var primaryUsed = false
+
+        for (target in allTargets) {
+            try {
+                val targetUserId = if (target.deviceId in recipientDeviceIds) recipientUserId else senderId
+                // Unique message id per device envelope (UUID PK + idempotency)
+                val envelopeId = if (!primaryUsed && target.deviceId in recipientDeviceIds) {
+                    primaryUsed = true
+                    messageId
+                } else {
+                    UUID.randomUUID().toString()
+                }
+                val envelope = skm.encryptMessage(targetUserId, target.deviceId, payloadStr, envelopeId)
+                val response = apiClient.sendMessage(
+                    conversationId = conversationId,
+                    content = envelope.ciphertext,
+                    messageId = envelopeId,
+                    recipientDeviceId = target.deviceId,
+                    messageType = envelope.messageType,
+                    attachment = sanitizedAttachment,
+                    attachments = sanitizedAttachments?.ifEmpty { null }
+                )
+                sentAny = true
+                if (envelopeId == messageId) {
+                    primaryResponse = response
+                } else if (primaryResponse == null) {
+                    primaryResponse = response
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "SignalE2EE",
+                    "encrypt_send_failed targetDevice=${target.deviceId} reason=${e.javaClass.simpleName}"
+                )
+            }
+        }
+
+        if (!sentAny || primaryResponse == null) {
+            throw IllegalStateException("Failed to send E2EE message to any target device")
+        }
+
+        return primaryResponse
     }
 
     suspend fun syncDelta() {
@@ -281,39 +577,62 @@ class ChatRepository @JvmOverloads constructor(
             val currentUserId = preferencesManager.userId.first()
 
             if (delta.messages.isNotEmpty()) {
-                val entities = delta.messages.map {
-                    val status = if (it.senderId == currentUserId) "sent" else "delivered"
-                    it.toEntity(status)
+                val localDeviceId = preferencesManager.getDeviceId().orEmpty()
+                val entities = mutableListOf<MessageEntity>()
+
+                for (remote in delta.messages) {
+                    // Skip envelopes encrypted for another device (defense in depth;
+                    // server already filters by recipient_device_id when device id is set).
+                    val target = remote.recipientDeviceId
+                    if (!target.isNullOrBlank() && localDeviceId.isNotBlank() && target != localDeviceId) {
+                        continue
+                    }
+
+                    val status = if (remote.senderId == currentUserId) "sent" else "delivered"
+                    val entity = remote.toEntity(status)
+                    if (entity.isDecryptionFailed || entity.decryptionStatus == "failed") {
+                        val existing = messageDao.getById(entity.id)
+                        if (existing == null || existing.decryptionStatus != "decrypted") {
+                            entities.add(entity.copy(syncStatus = "failed"))
+                        }
+                        continue
+                    }
+                    entities.add(entity)
                 }
+
                 upsertMessages(entities)
 
-                // For received messages, reliably report delivery via HTTP so the sender
-                // sees double-tick even if the WS was unavailable when the message arrived.
-                for (msg in delta.messages) {
-                    if (msg.senderId != currentUserId) {
+                // Receipts only after successful decrypt — prevents triple-tick on garbage
+                for (entity in entities) {
+                    if (entity.senderId != currentUserId &&
+                        entity.decryptionStatus == "decrypted" &&
+                        !entity.isDecryptionFailed &&
+                        entity.syncStatus != "failed"
+                    ) {
                         sendReceiptReliably(
-                            messageId = msg.id,
-                            conversationId = msg.conversationId,
+                            messageId = entity.id,
+                            conversationId = entity.conversationId,
                             status = "delivered",
                         )
                     }
                 }
 
-                val grouped = delta.messages.groupBy { it.conversationId }
-                for ((convId, msgs) in grouped) {
-                    val latest = msgs.maxByOrNull { it.createdAt.toEpochMillis() }
+                val grouped = entities.groupBy { it.conversationId }
+                var needConvSync = false
+                for ((convId, _) in grouped) {
                     val conv = conversationDao.getById(convId)
                     if (conv == null) {
-                        syncConversations()
-                        break
-                    } else if (latest != null) {
-                        conversationDao.insert(conv.copy(
-                            lastMessageText = latest.encryptedContent,
-                            lastMessageTime = latest.createdAt.toEpochMillis()
-                        ))
+                        needConvSync = true
+                    } else {
+                        refreshConversationListMeta(convId)
                     }
                 }
-                syncConversations()
+                if (needConvSync) {
+                    syncConversations()
+                    for (convId in grouped.keys) {
+                        refreshConversationListMeta(convId)
+                    }
+                }
             }
 
             if (delta.receipts.isNotEmpty()) {
@@ -419,11 +738,18 @@ class ChatRepository @JvmOverloads constructor(
                 try {
                     messageDao.insert(msg.copy(syncStatus = "pending"))
 
+                    val plain = msg.decryptedContent
+                    if (msg.decryptionStatus == "failed" ||
+                        plain == com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+                    ) {
+                        // Do not re-send undecryptable content
+                        messageDao.insert(msg.copy(syncStatus = "failed"))
+                        continue
+                    }
+
                     val response = if (!msg.attachmentUrl.isNullOrEmpty() || msg.sizeBytes != null) {
-                        // It is a media message!
                         val localFile = msg.localFilePath?.let { java.io.File(it) }
                         if (localFile == null || !localFile.exists()) {
-                            // Can't retry if local file is gone
                             messageDao.insert(msg.copy(syncStatus = "failed"))
                             continue
                         }
@@ -446,25 +772,32 @@ class ChatRepository @JvmOverloads constructor(
                             encryptedKey = msg.encryptedKey
                         )
 
-                        apiClient.sendMessage(
+                        sendE2EEMessage(
                             conversationId = msg.conversationId,
-                            content = msg.encryptedContent,
                             messageId = msg.id,
+                            content = plain,
                             attachment = attDto
                         )
                     } else {
-                        // Standard text message retry
-                        apiClient.sendMessage(msg.conversationId, msg.encryptedContent)
+                        sendE2EEMessage(
+                            conversationId = msg.conversationId,
+                            messageId = msg.id,
+                            content = plain
+                        )
                     }
 
                     messageDao.deleteById(msg.id)
                     val localFile = msg.localFilePath
-                    upsertMessage(response.toEntity("sent").copy(localFilePath = localFile))
+                    val localDeviceId = preferencesManager.getDeviceId() ?: msg.senderDeviceId
+                    upsertMessage(
+                        response.toEntityForSender("sent", plain, localDeviceId)
+                            .copy(localFilePath = localFile)
+                    )
 
-                    val conv = conversationDao.getById(msg.conversationId)
-                    if (conv != null) {
-                        conversationDao.insert(conv.copy(
-                            lastMessageText = msg.encryptedContent,
+                    val updatedConv = conversationDao.getById(msg.conversationId)
+                    if (updatedConv != null) {
+                        conversationDao.insert(updatedConv.copy(
+                            lastMessageText = plain,
                             lastMessageTime = response.createdAt.toEpochMillis()
                         ))
                     }
@@ -513,15 +846,29 @@ class ChatRepository @JvmOverloads constructor(
         if (existing == null) {
             messageDao.insert(message.copy(syncStatus = status))
         } else {
-            // Merge: preserve local-only fields (localFilePath), update all server fields
+            // Prefer already-decrypted local content over a failed remote re-map
+            val keepLocalPlaintext = existing.decryptionStatus == "decrypted" &&
+                message.decryptionStatus == "failed"
+            val mergedDecryptStatus = when {
+                keepLocalPlaintext -> existing.decryptionStatus
+                message.decryptionStatus == "decrypted" -> "decrypted"
+                existing.decryptionStatus == "decrypted" -> existing.decryptionStatus
+                else -> message.decryptionStatus
+            }
             messageDao.insert(existing.copy(
                 syncStatus = if (getStatusPrecedence(status) > getStatusPrecedence(existing.syncStatus)) status else existing.syncStatus,
-                encryptedContent = if (message.encryptedContent != "[Media]") message.encryptedContent else existing.encryptedContent,
-                senderDeviceId = message.senderDeviceId,
+                encryptedContent = when {
+                    keepLocalPlaintext -> existing.encryptedContent
+                    message.encryptedContent != "[Media]" -> message.encryptedContent
+                    else -> existing.encryptedContent
+                },
+                senderDeviceId = message.senderDeviceId.ifBlank { existing.senderDeviceId },
                 attachmentUrl = message.attachmentUrl?.takeIf { it.isNotEmpty() } ?: existing.attachmentUrl,
                 mimeType = message.mimeType?.takeIf { it.isNotEmpty() } ?: existing.mimeType,
                 sizeBytes = message.sizeBytes ?: existing.sizeBytes,
-                encryptedKey = message.encryptedKey?.takeIf { it.isNotEmpty() } ?: existing.encryptedKey
+                encryptedKey = message.encryptedKey?.takeIf { it.isNotEmpty() } ?: existing.encryptedKey,
+                decryptionStatus = mergedDecryptStatus,
+                localFilePath = existing.localFilePath ?: message.localFilePath
             ))
         }
     }
@@ -535,22 +882,27 @@ class ChatRepository @JvmOverloads constructor(
     suspend fun markConversationAsRead(conversationId: String) {
         val currentUserId = preferencesManager.userId.first() ?: return
 
-        // Mark all received messages in the conversation as read locally.
+        // Only ACK messages that decrypted successfully — never receipt "Unable to decrypt".
+        val unreadIds = try {
+            messageDao.getUnreadReceivedMessages(currentUserId)
+                .filter { it.conversationId == conversationId }
+                .filter { it.decryptionStatus == "decrypted" && !it.isDecryptionFailed }
+                .map { it.id }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        // Mark all received messages in the conversation as read locally (incl. failed decrypt rows).
         messageDao.markConversationMessagesRead(conversationId, currentUserId)
         conversationDao.clearUnreadCount(conversationId)
+        refreshConversationListMeta(conversationId)
         notificationHelper?.cancelNotification(conversationId)
 
-        // Best-effort real-time WS signal (fires immediately, even if it fails the
-        // HTTP path below will still report accurate receipt status).
         webSocketManager.markConversationRead(conversationId)
 
-        // Queue reliable HTTP receipts for each unread received message.
-        // This ensures the sender sees double-tick even if WS is unavailable.
         try {
-            val unread = messageDao.getUnreadReceivedMessages(currentUserId)
-                .filter { it.conversationId == conversationId }
-            for (msg in unread) {
-                sendReceiptReliably(msg.id, conversationId, "read")
+            for (id in unreadIds) {
+                sendReceiptReliably(id, conversationId, "read")
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -694,11 +1046,11 @@ class ChatRepository @JvmOverloads constructor(
         // Bust image loader cache when the avatar reference changes.
         if (!previousAvatar.isNullOrBlank() && previousAvatar != user.avatarUrl) {
             AvatarUrlResolver.invalidate(previousAvatar)
-            context?.let { AvatarUrlResolver.evictFromImageLoader(it, previousAvatar) }
+            appContext?.let { AvatarUrlResolver.evictFromImageLoader(it, previousAvatar) }
         }
         if (user.avatarUrl.isNotBlank()) {
             AvatarUrlResolver.invalidate(user.avatarUrl)
-            context?.let { AvatarUrlResolver.evictFromImageLoader(it, user.avatarUrl) }
+            appContext?.let { AvatarUrlResolver.evictFromImageLoader(it, user.avatarUrl) }
         }
     }
 
@@ -789,12 +1141,14 @@ class ChatRepository @JvmOverloads constructor(
     // Mapper utilities
     private fun ConversationSummaryDto.toEntity(): ConversationEntity {
         val (start, end) = ColorGenerator.generateGradient(id)
+        // lastMessageText is filled in syncConversations from the local decrypted message DB.
+        // Server last_message is ciphertext-only and must not be used as UI preview.
         return ConversationEntity(
             id = id,
             type = type,
             createdAt = createdAt.toEpochMillis(),
             unreadCount = unreadCount,
-            lastMessageText = lastMessage?.encryptedContent,
+            lastMessageText = null,
             lastMessageTime = lastMessage?.createdAt?.toEpochMillis(),
             title = displayName ?: username,
             username = username,
@@ -841,20 +1195,155 @@ class ChatRepository @JvmOverloads constructor(
         }
     }
 
-    private fun MessageDto.toEntity(status: String): MessageEntity {
+    /**
+     * Map a remote message for the *sender* who already knows the plaintext.
+     * Never attempt Signal decrypt of a recipient-targeted ciphertext on the sending device.
+     */
+    private fun MessageDto.toEntityForSender(
+        status: String,
+        knownPlaintext: String,
+        localDeviceId: String
+    ): MessageEntity {
         val firstAtt = attachments?.firstOrNull()
+        val locallyEncrypted = com.whisprtext.app.crypto.LocalEncryptor.encrypt(knownPlaintext)
         return MessageEntity(
             id = id,
             conversationId = conversationId,
             senderId = senderId,
-            senderDeviceId = senderDeviceId,
-            encryptedContent = encryptedContent,
+            senderDeviceId = senderDeviceId.ifBlank { localDeviceId },
+            encryptedContent = locallyEncrypted,
             createdAt = createdAt.toEpochMillis(),
             syncStatus = status,
             attachmentUrl = firstAtt?.fileUrl,
             mimeType = firstAtt?.mimeType,
             sizeBytes = firstAtt?.sizeBytes,
-            encryptedKey = firstAtt?.encryptedKey
+            encryptedKey = firstAtt?.encryptedKey,
+            decryptionStatus = "decrypted"
+        )
+    }
+
+    /**
+     * Map a remote message for local display. Decrypts Signal ciphertext once;
+     * stores only LocalEncryptor-wrapped plaintext. Never persists transport ciphertext
+     * as user-visible content.
+     */
+    private fun MessageDto.toEntity(status: String): MessageEntity {
+        val firstAtt = attachments?.firstOrNull()
+        val currentUserId = cachedUserId ?: ""
+        val localDeviceId = try {
+            kotlinx.coroutines.runBlocking { preferencesManager.getDeviceId() } ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+
+        // If this is our own outbound envelope for another device, skip (or we may already
+        // have a local copy). Still try decrypt only when targeted at this device (sync).
+        val isOwnOutbound = senderId == currentUserId
+        val targetedAtUs = recipientDeviceId.isNullOrBlank() ||
+            recipientDeviceId == localDeviceId
+
+        var decryptionStatus = "decrypted"
+        var plaintext: String? = null
+
+        if (isOwnOutbound && !targetedAtUs) {
+            // Echo of a copy encrypted for someone else — do not decrypt or display ciphertext.
+            // Prefer not inserting; caller may still insert — mark as non-display failure-safe.
+            decryptionStatus = "failed"
+            plaintext = null
+        } else if (messageType == org.whispersystems.libsignal.protocol.CiphertextMessage.PREKEY_TYPE ||
+            messageType == org.whispersystems.libsignal.protocol.CiphertextMessage.WHISPER_TYPE
+        ) {
+            try {
+                plaintext = kotlinx.coroutines.runBlocking {
+                    signalKeyManager?.decryptMessage(
+                        senderUserId = senderId,
+                        senderDeviceId = senderDeviceId,
+                        ciphertextBase64 = encryptedContent,
+                        messageType = messageType,
+                        messageId = id,
+                        recipientDeviceId = recipientDeviceId
+                    )
+                }
+                if (plaintext == null) {
+                    decryptionStatus = "failed"
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "SignalE2EE",
+                    "toEntity_decrypt_failed messageId=$id type=$messageType reason=${e.javaClass.simpleName}"
+                )
+                decryptionStatus = "failed"
+                plaintext = null
+            }
+        } else if (messageType == 0) {
+            // Legacy unencrypted transport — do not treat as success for E2EE product path.
+            // If it looks like ciphertext, refuse to display; otherwise allow migration text.
+            if (com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(encryptedContent)) {
+                decryptionStatus = "failed"
+                plaintext = null
+            } else {
+                plaintext = encryptedContent
+            }
+        } else {
+            decryptionStatus = "failed"
+            plaintext = null
+        }
+
+        var finalText = if (decryptionStatus == "failed") {
+            // Store a non-sensitive placeholder under LocalEncryptor — never the ciphertext
+            com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+        } else {
+            plaintext ?: ""
+        }
+
+        var firstAttUrl = firstAtt?.fileUrl
+        var firstAttMime = firstAtt?.mimeType
+        var firstAttSize = firstAtt?.sizeBytes
+        var firstAttKey = firstAtt?.encryptedKey
+
+        if (decryptionStatus == "decrypted" && !plaintext.isNullOrBlank()) {
+            try {
+                val gson = com.google.gson.Gson()
+                val payload = gson.fromJson(
+                    plaintext,
+                    com.whisprtext.app.crypto.SignalKeyManager.DecryptedPayload::class.java
+                )
+                if (payload != null) {
+                    finalText = payload.text ?: ""
+                    val attPayload = payload.attachments?.firstOrNull()
+                    if (attPayload != null) {
+                        firstAttUrl = attPayload.objectKey
+                        firstAttMime = attPayload.mimeType
+                        firstAttSize = attPayload.sizeBytes
+                        firstAttKey = attPayload.attachmentKey
+                    }
+                }
+            } catch (_: Exception) {
+                // Not a JSON payload — treat as raw text
+            }
+        }
+
+        // Final guard: never store raw ciphertext as local display content
+        if (com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(finalText)) {
+            finalText = com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+            decryptionStatus = "failed"
+        }
+
+        val locallyEncrypted = com.whisprtext.app.crypto.LocalEncryptor.encrypt(finalText)
+
+        return MessageEntity(
+            id = id,
+            conversationId = conversationId,
+            senderId = senderId,
+            senderDeviceId = senderDeviceId,
+            encryptedContent = locallyEncrypted,
+            createdAt = createdAt.toEpochMillis(),
+            syncStatus = status,
+            attachmentUrl = firstAttUrl,
+            mimeType = firstAttMime,
+            sizeBytes = firstAttSize,
+            encryptedKey = firstAttKey,
+            decryptionStatus = decryptionStatus
         )
     }
 
@@ -921,12 +1410,12 @@ class ChatRepository @JvmOverloads constructor(
         content: String = "[Media]",
         extraUris: List<Pair<String, String>> = emptyList()
     ) {
-        val context = context ?: throw Exception("Context is null")
+        val ctx = appContext ?: throw Exception("Context is null")
 
         // Upload primary media
         val primaryUri = Uri.parse(uriString)
-        val plaintextBytes = context.contentResolver.openInputStream(primaryUri)?.use { it.readBytes() }
-            ?: throw Exception("Failed to read file bytes")
+        val primaryStream = ctx.contentResolver.openInputStream(primaryUri) ?: throw Exception("Failed to open input stream")
+        val plaintextBytes = try { primaryStream.readBytes() } finally { primaryStream.close() }
 
         if (plaintextBytes.size > 10 * 1024 * 1024) {
             throw Exception("File size exceeds 10MB limit")
@@ -935,19 +1424,20 @@ class ChatRepository @JvmOverloads constructor(
         val aesKey = MediaCrypto.generateAESKey()
         val encryptedBytes = MediaCrypto.encrypt(plaintextBytes, aesKey)
 
-        val cacheDir = File(context.cacheDir, "media_cache").apply { mkdirs() }
+        val cacheDir = File(ctx.cacheDir, "media_cache").apply { mkdirs() }
         val localFile = File(cacheDir, UUID.randomUUID().toString())
         localFile.writeBytes(plaintextBytes)
 
         val tempId = UUID.randomUUID().toString()
         val displayContent = if (content.isNotBlank() && content != "[Media]") content else "[Media]"
 
+        val locallyEncrypted = com.whisprtext.app.crypto.LocalEncryptor.encrypt(displayContent)
         val localMsg = MessageEntity(
             id = tempId,
             conversationId = conversationId,
             senderId = senderId,
             senderDeviceId = senderDeviceId,
-            encryptedContent = displayContent,
+            encryptedContent = locallyEncrypted,
             createdAt = System.currentTimeMillis(),
             syncStatus = "pending",
             attachmentUrl = "",
@@ -957,15 +1447,7 @@ class ChatRepository @JvmOverloads constructor(
             localFilePath = localFile.absolutePath
         )
         messageDao.insert(localMsg)
-
-        val conv = conversationDao.getById(conversationId)
-        val lastMsgText = if (content.isNotBlank() && content != "[Media]") content else "[Media]"
-        if (conv != null) {
-            conversationDao.insert(conv.copy(
-                lastMessageText = lastMsgText,
-                lastMessageTime = localMsg.createdAt
-            ))
-        }
+        refreshConversationListMeta(conversationId)
 
         try {
             // Step 1-3: Upload primary media
@@ -988,8 +1470,8 @@ class ChatRepository @JvmOverloads constructor(
             // Upload extra media files
             for ((extraUriStr, extraMime) in extraUris) {
                 val extraUri = Uri.parse(extraUriStr)
-                val extraPlaintext = context.contentResolver.openInputStream(extraUri)?.use { it.readBytes() }
-                    ?: continue
+                val extraStream = ctx.contentResolver.openInputStream(extraUri) ?: continue
+                val extraPlaintext = try { extraStream.readBytes() } finally { extraStream.close() }
                 if (extraPlaintext.size > 10 * 1024 * 1024) continue
 
                 val extraKey = MediaCrypto.generateAESKey()
@@ -1012,36 +1494,36 @@ class ChatRepository @JvmOverloads constructor(
                 )
             }
 
-            // Step 4: Send message with all attachments
-            val response = apiClient.sendMessage(
+            // E2EE only — AES keys are packed into the Signal payload inside sendE2EEMessage,
+            // then stripped from the attachment metadata sent to the server.
+            val response = sendE2EEMessage(
                 conversationId = conversationId,
-                content = displayContent,
                 messageId = tempId,
+                content = displayContent,
                 attachment = attDtos.first(),
                 attachments = attDtos.drop(1).ifEmpty { null }
             )
 
             messageDao.deleteById(tempId)
-            val finalEntity = response.toEntity("sent").copy(
-                localFilePath = localFile.absolutePath
+            val localDeviceId = preferencesManager.getDeviceId() ?: senderDeviceId
+            val finalEntity = response.toEntityForSender("sent", displayContent, localDeviceId).copy(
+                localFilePath = localFile.absolutePath,
+                attachmentUrl = attDtos.first().fileUrl,
+                mimeType = mimeType,
+                sizeBytes = plaintextBytes.size.toLong(),
+                encryptedKey = MediaCrypto.bytesToHex(aesKey)
             )
             upsertMessage(finalEntity)
-
-            val updatedConv = conversationDao.getById(conversationId)
-            if (updatedConv != null) {
-                conversationDao.insert(updatedConv.copy(
-                    lastMessageText = lastMsgText,
-                    lastMessageTime = response.createdAt.toEpochMillis()
-                ))
-            }
+            refreshConversationListMeta(conversationId)
         } catch (e: Exception) {
             e.printStackTrace()
             messageDao.insert(localMsg.copy(syncStatus = "failed"))
+            refreshConversationListMeta(conversationId)
         }
     }
 
     suspend fun downloadAndDecryptMedia(message: MessageEntity): String? {
-        val context = context ?: return null
+        val ctx = appContext ?: return null
         if (message.attachmentUrl.isNullOrEmpty() || message.encryptedKey.isNullOrEmpty()) {
             return null
         }
@@ -1066,7 +1548,7 @@ class ChatRepository @JvmOverloads constructor(
             val decryptedBytes = MediaCrypto.decrypt(encryptedBytes, keyBytes)
 
             // Step 4: Cache locally
-            val cacheDir = File(context.cacheDir, "media_cache").apply { mkdirs() }
+            val cacheDir = File(ctx.cacheDir, "media_cache").apply { mkdirs() }
             val localFile = File(cacheDir, UUID.randomUUID().toString())
             localFile.writeBytes(decryptedBytes)
 

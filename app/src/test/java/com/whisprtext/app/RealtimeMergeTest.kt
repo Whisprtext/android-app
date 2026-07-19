@@ -64,7 +64,7 @@ class RealtimeMergeTest {
             webSocketManager,
             networkMonitor,
             preferencesManager,
-            context = null,
+            appContext = null,
             ioDispatcher = kotlinx.coroutines.test.UnconfinedTestDispatcher()
         )
     }

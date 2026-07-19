@@ -63,7 +63,14 @@ class AuthViewModelTest {
         runCurrent()
 
         assertEquals(AuthState.Success, viewModel.authState.value)
-        verify(preferencesManager).saveSession("dummy-token", "user-123", "alice", "")
+        verify(preferencesManager).saveSession(
+            org.mockito.kotlin.eq("dummy-token"),
+            org.mockito.kotlin.eq("user-123"),
+            org.mockito.kotlin.eq("alice"),
+            any(),
+            any(),
+            org.mockito.kotlin.eq("device-123")
+        )
     }
 
     @Test

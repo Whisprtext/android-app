@@ -1,0 +1,4 @@
+- [x] Update `androidx.datastore` version in `libs.versions.toml`
+- [x] Add legacy JNI packaging to `app/build.gradle.kts`
+- [x] Add `pageSizeCompat` to `AndroidManifest.xml`
+- [x] Verify build

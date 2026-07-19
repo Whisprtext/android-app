@@ -95,8 +95,7 @@ class OfflineQueueRetryTest {
     }
 
     @Test
-    fun testRetryFailedMessagesSendsAndUpdatesStatus() = runTest {
-        // Setup local failed messages
+    fun testRetryFailedMessagesRequiresE2EE_noPlaintextWireSend() = runTest {
         val failedMsg = MessageEntity(
             id = "temp-failed-id",
             conversationId = "conv-123",
@@ -104,39 +103,21 @@ class OfflineQueueRetryTest {
             senderDeviceId = "dev-1",
             encryptedContent = "Hello Offline",
             createdAt = 1000L,
-            syncStatus = "failed"
+            syncStatus = "failed",
+            decryptionStatus = "decrypted"
         )
         whenever(messageDao.getMessagesBySyncStatus("failed")).thenReturn(listOf(failedMsg))
         whenever(conversationDao.getById("conv-123")).thenReturn(
-            ConversationEntity("conv-123", "direct", 1000L, 0, "Hello Offline", 1000L)
+            ConversationEntity("conv-123", "direct", 1000L, 0, "Hello Offline", 1000L, username = "bob")
         )
+        whenever(preferencesManager.getDeviceId()).thenReturn("dev-1")
 
-        // Mock success response from API on retry
-        val successDto = MessageDto(
-            id = "db-final-uuid",
-            conversationId = "conv-123",
-            senderId = "user-1",
-            senderDeviceId = "dev-1",
-            encryptedContent = "Hello Offline",
-            createdAt = "2026-07-12T12:00:00Z"
-        )
-        whenever(apiClient.sendMessage("conv-123", "Hello Offline")).thenReturn(successDto)
-
+        // Without SignalKeyManager in this unit test, retry must not fall back to plaintext
         repository.retryFailedMessages()
 
-        // Verify it was updated to "sending", temporary deleted, and final "sent" inserted
         val msgCaptor = argumentCaptor<MessageEntity>()
-        verify(messageDao, times(2)).insert(msgCaptor.capture())
-
-        // 1. Temporary message set to "pending"
-        assertEquals("pending", msgCaptor.firstValue.syncStatus)
-        assertEquals("temp-failed-id", msgCaptor.firstValue.id)
-
-        // 2. Temp message deleted
-        verify(messageDao).deleteById("temp-failed-id")
-
-        // 3. Final message inserted as "sent"
-        assertEquals("sent", msgCaptor.secondValue.syncStatus)
-        assertEquals("db-final-uuid", msgCaptor.secondValue.id)
+        verify(messageDao, atLeastOnce()).insert(msgCaptor.capture())
+        assert(msgCaptor.allValues.any { it.syncStatus == "failed" })
+        verify(apiClient, never()).sendMessage(any(), any())
     }
 }

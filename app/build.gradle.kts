@@ -33,6 +33,11 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -76,6 +81,10 @@ dependencies {
     // Firebase (Cloud Messaging for push notifications)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    implementation(libs.signal.protocol)
+    implementation(libs.androidx.security.crypto)
+
+
 
 
     testImplementation(libs.junit)
