@@ -530,6 +530,105 @@ class ApiClient(
         }
     }
 
+    suspend fun sendQueueMessage(
+        clientMessageId: String,
+        recipientUserId: String,
+        recipientDeviceId: String,
+        ciphertext: String,
+        ciphertextType: String = "prekey",
+        protocolVersion: Int = 1,
+        conversationId: String? = null
+    ): QueueMessageResponse? {
+        val params = mutableMapOf<String, Any?>(
+            "client_message_id" to clientMessageId,
+            "recipient_user_id" to recipientUserId,
+            "recipient_device_id" to recipientDeviceId,
+            "ciphertext" to ciphertext,
+            "ciphertext_type" to ciphertextType,
+            "protocol_version" to protocolVersion
+        )
+        if (conversationId != null) params["conversation_id"] = conversationId
+        val json = gson.toJson(params)
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/messages")
+            .post(body)
+            .build()
+        return try {
+            executeRequest<QueueMessageResponse>(request)
+        } catch (e: Exception) {
+            android.util.Log.e("QueueAPI", "sendQueueMessage failed: ${e.message?.take(60)}")
+            null
+        }
+    }
+
+    suspend fun getPendingQueueMessages(): List<QueuePendingMessageDto> {
+        val request = Request.Builder()
+            .url("$baseUrl/messages/pending")
+            .get()
+            .build()
+        val type = object : com.google.gson.reflect.TypeToken<QueuePendingResponse>() {}.type
+        return try {
+            val resp = executeRequest<QueuePendingResponse>(request, type)
+            resp.messages
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun acknowledgeQueueMessage(messageId: String, clientMessageId: String, recipientDeviceId: String, status: String = "received"): Boolean {
+        val params = mapOf(
+            "client_message_id" to clientMessageId,
+            "recipient_device_id" to recipientDeviceId,
+            "status" to status
+        )
+        val json = gson.toJson(params)
+        val body = json.toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url("$baseUrl/messages/$messageId/ack")
+            .post(body)
+            .build()
+        return executeStatusRequest(request)
+    }
+
+    suspend fun syncQueueMessages(): List<QueuePendingMessageDto> {
+        val request = Request.Builder()
+            .url("$baseUrl/messages/sync")
+            .get()
+            .build()
+        val type = object : com.google.gson.reflect.TypeToken<QueuePendingResponse>() {}.type
+        return try {
+            val resp = executeRequest<QueuePendingResponse>(request, type)
+            resp.messages
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    data class QueueMessageResponse(
+        val id: String,
+        val client_message_id: String,
+        val status: String,
+        val created_at: String = ""
+    )
+
+    data class QueuePendingMessageDto(
+        val id: String,
+        val client_message_id: String,
+        val sender_user_id: String,
+        val sender_device_id: String,
+        val recipient_device_id: String,
+        val ciphertext: String,
+        val ciphertext_type: String,
+        val protocol_version: Int = 1,
+        val conversation_id: String? = null,
+        val created_at: String = ""
+    )
+
+    data class QueuePendingResponse(
+        val messages: List<QueuePendingMessageDto>
+    )
+
     private suspend fun executeStatusRequest(request: Request): Boolean = withContext(Dispatchers.IO) {
         client.newCall(request).execute().use { response ->
             response.isSuccessful

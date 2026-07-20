@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 
 sealed class WebSocketEvent {
     data class NewMessage(val message: MessageDto) : WebSocketEvent()
+    data class NewQueuedMessage(val message: ApiClient.QueuePendingMessageDto) : WebSocketEvent()
     data class Ack(val clientMsgId: String, val messageId: String, val status: String) : WebSocketEvent()
     data class ReceiptUpdate(val receipt: ReceiptDto) : WebSocketEvent()
     data class Error(val clientMsgId: String?, val message: String) : WebSocketEvent()
@@ -102,6 +103,11 @@ class WebSocketManager(
                             val dataJson = gson.toJson(wrapper.data)
                             val message = gson.fromJson(dataJson, MessageDto::class.java)
                             WebSocketEvent.NewMessage(message)
+                        }
+                        "new_queued_message" -> {
+                            val dataJson = gson.toJson(wrapper.data)
+                            val qm = gson.fromJson(dataJson, ApiClient.QueuePendingMessageDto::class.java)
+                            WebSocketEvent.NewQueuedMessage(qm)
                         }
                         "ack" -> {
                             val dataJson = gson.toJson(wrapper.data)

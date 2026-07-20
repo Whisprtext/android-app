@@ -395,18 +395,12 @@ class SignalKeyManager(
                     isError = true
                 )
 
-                // Drop broken session so the *next* inbound prekey message can re-establish
-                if (sessionExists) {
-                    store.deleteSession(address)
-                    logCrypto(
-                        "session_reset",
-                        mapOf(
-                            "messageId" to (messageId ?: ""),
-                            "senderDeviceId" to senderDeviceId,
-                            "reason" to "decrypt_failure"
-                        )
-                    )
-                }
+                // Do NOT delete the session here. Deleting on any transient failure
+                // causes a cascading problem: the sender still has a valid session
+                // and keeps sending Whisper messages, but the recipient can no longer
+                // decrypt them. The session will be replaced naturally when the next
+                // PreKey message arrives (processPreKeyBundle already deletes any
+                // existing session before establishing a new one).
                 throw first
             }
         }

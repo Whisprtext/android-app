@@ -107,6 +107,7 @@ data class MessageDto(
     @SerializedName("encrypted_content") val encryptedContent: String,
     @SerializedName("message_type") val messageType: Int = 0,
     @SerializedName("created_at") val createdAt: String,
+    val status: String? = null,
     val attachments: List<AttachmentDto>? = null
 )
 

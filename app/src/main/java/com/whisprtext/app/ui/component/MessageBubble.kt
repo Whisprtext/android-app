@@ -110,6 +110,7 @@ fun ChatBubble(
                     if (isSelf && syncStatus != null) {
                         val statusText = when (syncStatus) {
                             "pending" -> "🕒"
+                            "queued" -> "✓"
                             "failed" -> "✕"
                             "sent" -> "✓"
                             "delivered" -> "✓✓"

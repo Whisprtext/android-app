@@ -5,6 +5,7 @@ import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.entity.MessageEntity
+import com.whisprtext.app.data.local.entity.OutboxEntity
 import com.whisprtext.app.data.local.entity.PendingReceiptEntity
 import com.whisprtext.app.data.local.entity.UserProfileEntity
 import com.whisprtext.app.data.remote.ApiClient
@@ -41,6 +42,7 @@ class ChatRepository @JvmOverloads constructor(
 ) {
     private val conversationDao = database.conversationDao()
     private val messageDao = database.messageDao()
+    private val outboxDao = database.outboxDao()
     private val pendingReceiptDao = database.pendingReceiptDao()
     private val userProfileDao = database.userProfileDao()
     private val scope = CoroutineScope(ioDispatcher)
@@ -212,9 +214,57 @@ class ChatRepository @JvmOverloads constructor(
                         is WebSocketEvent.MessageDeleted -> {
                             messageDao.deleteById(event.messageId)
                         }
+                        is WebSocketEvent.NewQueuedMessage -> {
+                            // Handle queued message delivery via WebSocket
+                            val qm = event.message
+                            val currentUserId = cachedUserId ?: preferencesManager.userId.first() ?: ""
+                            val localDeviceId = preferencesManager.getDeviceId().orEmpty()
+
+                            // Skip envelopes encrypted for another device
+                            val target = qm.recipient_device_id
+                            if (target.isNotBlank() && localDeviceId.isNotBlank() && target != localDeviceId) {
+                                return@collect
+                            }
+
+                            // Decrypt and store
+                            val status = if (qm.sender_user_id == currentUserId) "sent" else "delivered"
+
+                            // Use client_message_id (actual message ID) not queue UUID (qm.id)
+                            // so that delivery receipts match the sender's copy of the message.
+                            val msgDto = MessageDto(
+                                id = qm.client_message_id,
+                                conversationId = qm.conversation_id ?: "",
+                                senderId = qm.sender_user_id,
+                                senderDeviceId = qm.sender_device_id,
+                                recipientDeviceId = qm.recipient_device_id,
+                                encryptedContent = qm.ciphertext,
+                                messageType = if (qm.ciphertext_type == "prekey") 3 else 2,
+                                createdAt = qm.created_at
+                            )
+                            val entity = msgDto.toEntity(status)
+                            upsertMessage(entity)
+
+                            // Send ack — queue UUID for the server API, actual message ID for local update
+                            sendQueueAck(qm.id, qm.client_message_id, localDeviceId)
+
+                            // Send delivery receipt using the actual message ID so the sender
+                            // can match it to the stored message and show double ticks.
+                            if (qm.sender_user_id != currentUserId) {
+                                val isCurrentChat = isAppInForeground && activeConversationId == qm.conversation_id
+                                val receiptStatus = if (isCurrentChat) "read" else "delivered"
+                                if (qm.conversation_id != null) {
+                                    sendReceiptReliably(qm.client_message_id, qm.conversation_id, receiptStatus)
+                                }
+                            }
+
+                            if (qm.conversation_id != null) {
+                                refreshConversationListMeta(qm.conversation_id)
+                            }
+                        }
                         is WebSocketEvent.Connected -> {
                             // On WebSocket reconnect, flush pending receipts first, then
-                            // do a delta sync to catch up on messages missed while offline.
+                            // flush outbox, then do a delta sync
+                            syncOutbox()
                             syncReceipts()
                             syncDelta()
                             retryFailedMessages()
@@ -239,12 +289,13 @@ class ChatRepository @JvmOverloads constructor(
                             delay(1500)
                             isFirstSync = false
                             
+                            syncOutbox()
                             syncReceipts()
                             syncDelta()
                             retryFailedMessages()
                         } else if (wasOffline) {
-                            // Coming back online: flush pending receipts before delta sync
-                            // so the server gets accurate delivery information.
+                            // Coming back online: flush outbox and pending receipts before delta sync
+                            syncOutbox()
                             syncReceipts()
                             syncDelta()
                             retryFailedMessages()
@@ -257,6 +308,152 @@ class ChatRepository @JvmOverloads constructor(
             } catch (e: Exception) {
                 // Ignore
             }
+        }
+    }
+
+    /**
+     * Send a message via the offline queue API. The message is first stored
+     * in the local outbox, then sent to the server. On success, the outbox
+     * entry is updated. On failure, it remains for retry.
+     */
+    suspend fun sendQueueMessage(
+        conversationId: String,
+        recipientUserId: String,
+        recipientDeviceId: String,
+        ciphertextBase64: String,
+        ciphertextType: String = "prekey",
+        protocolVersion: Int = 1,
+        clientMessageId: String = UUID.randomUUID().toString(),
+        decryptedContent: String? = null,
+        localFilePath: String? = null,
+        mimeType: String? = null,
+        sizeBytes: Long? = null,
+        attachmentUrl: String? = null,
+        encryptedKey: String? = null
+    ): String {
+        val now = System.currentTimeMillis()
+        val outboxEntry = OutboxEntity(
+            clientMessageId = clientMessageId,
+            conversationId = conversationId,
+            recipientUserId = recipientUserId,
+            recipientDeviceId = recipientDeviceId,
+            ciphertextBase64 = ciphertextBase64,
+            ciphertextType = ciphertextType,
+            protocolVersion = protocolVersion,
+            createdAt = now,
+            status = "pending",
+            decryptedContent = decryptedContent,
+            localFilePath = localFilePath,
+            mimeType = mimeType,
+            sizeBytes = sizeBytes,
+            attachmentUrl = attachmentUrl,
+            encryptedKey = encryptedKey
+        )
+        outboxDao.insert(outboxEntry)
+
+        // Insert local pending message for immediate UI feedback
+        val senderId = cachedUserId ?: preferencesManager.userId.first() ?: ""
+        val localDeviceId = preferencesManager.getDeviceId().orEmpty()
+        if (decryptedContent != null) {
+            val locallyEncrypted = com.whisprtext.app.crypto.LocalEncryptor.encrypt(decryptedContent)
+            val localMsg = MessageEntity(
+                id = clientMessageId,
+                conversationId = conversationId,
+                senderId = senderId,
+                senderDeviceId = localDeviceId,
+                encryptedContent = locallyEncrypted,
+                createdAt = now,
+                syncStatus = "pending",
+                decryptionStatus = "decrypted",
+                attachmentUrl = attachmentUrl,
+                mimeType = mimeType,
+                sizeBytes = sizeBytes,
+                encryptedKey = encryptedKey,
+                localFilePath = localFilePath
+            )
+            messageDao.insert(localMsg)
+        }
+
+        // Attempt immediate send
+        tryFlushOutboxEntry(outboxEntry)
+        refreshConversationListMeta(conversationId)
+        return clientMessageId
+    }
+
+    /**
+     * Try to send a single outbox entry to the server.
+     */
+    private suspend fun tryFlushOutboxEntry(entry: OutboxEntity) {
+        try {
+            outboxDao.updateStatus(entry.clientMessageId, "queued")
+            messageDao.updateSyncStatus(entry.clientMessageId, "queued")
+
+            val response = apiClient.sendQueueMessage(
+                clientMessageId = entry.clientMessageId,
+                recipientUserId = entry.recipientUserId,
+                recipientDeviceId = entry.recipientDeviceId,
+                ciphertext = entry.ciphertextBase64,
+                ciphertextType = entry.ciphertextType,
+                protocolVersion = entry.protocolVersion,
+                conversationId = entry.conversationId
+            )
+
+            if (response != null && (response.status == "queued" || response.status == "delivered")) {
+                outboxDao.updateStatus(entry.clientMessageId, response.status)
+                messageDao.updateSyncStatus(entry.clientMessageId, response.status)
+            } else {
+                outboxDao.updateStatus(entry.clientMessageId, "failed")
+                messageDao.updateSyncStatus(entry.clientMessageId, "failed")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Outbox", "flush failed: ${e.message?.take(60)}")
+            outboxDao.updateStatus(entry.clientMessageId, "failed")
+            messageDao.updateSyncStatus(entry.clientMessageId, "failed")
+        }
+    }
+
+    /**
+     * Flush all pending/queued outbox entries to the server.
+     * Called on reconnect and periodically.
+     */
+    suspend fun syncOutbox() {
+        try {
+            val pending = outboxDao.getPending()
+            for (entry in pending) {
+                tryFlushOutboxEntry(entry)
+            }
+
+            val failed = outboxDao.getFailed()
+            for (entry in failed) {
+                // Retry failed messages with exponential backoff
+                if (entry.attemptCount > 0) {
+                    val backoff = (1L shl entry.attemptCount.coerceAtMost(6)) * 1000L
+                    if (entry.lastAttemptAt != null && System.currentTimeMillis() - entry.lastAttemptAt < backoff) {
+                        continue
+                    }
+                }
+                tryFlushOutboxEntry(entry)
+            }
+
+            // Clean up old sent entries (>24h)
+            val threshold = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+            outboxDao.deleteOldSent(threshold)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Send acknowledgement for a queued message back to the server.
+     */
+    suspend fun sendQueueAck(queueMessageId: String, actualMessageId: String, localDeviceId: String) {
+        try {
+            apiClient.acknowledgeQueueMessage(queueMessageId, actualMessageId, localDeviceId)
+            // Update local message status using the actual message ID (not queue UUID)
+            // so the update matches the message stored by upsertMessage().
+            messageDao.updateSyncStatus(actualMessageId, "delivered")
+        } catch (e: Exception) {
+            android.util.Log.e("QueueAck", "ack failed: ${e.message?.take(60)}")
         }
     }
 
@@ -443,7 +640,7 @@ class ChatRepository @JvmOverloads constructor(
             messageDao.deleteById(tempId)
             upsertMessage(
                 response.toEntityForSender(
-                    status = "sent",
+                    status = if (response.status == "queued") "queued" else "sent",
                     knownPlaintext = content,
                     localDeviceId = resolvedDeviceId
                 )
@@ -451,7 +648,41 @@ class ChatRepository @JvmOverloads constructor(
             refreshConversationListMeta(conversationId)
         } catch (e: Exception) {
             e.printStackTrace()
-            messageDao.insert(localMsg.copy(syncStatus = "failed"))
+            // Fall back to queue path via outbox
+            try {
+                val skm = signalKeyManager
+                    ?: throw IllegalStateException("SignalKeyManager unavailable")
+                val conv = conversationDao.getById(conversationId) ?: throw IllegalStateException("Conversation not found")
+                val recipientUsername = conv.username ?: throw IllegalStateException("Recipient username not found")
+                val recipientUserId = getOrResolveUserId(recipientUsername)
+                skm.registerDeviceKeysIfNecessary(senderId, resolvedDeviceId)
+                val recipientBundles = skm.fetchPreKeyBundles(recipientUserId)
+                if (recipientBundles.isNotEmpty()) {
+                    val gson = com.google.gson.Gson()
+                    val payload = com.whisprtext.app.crypto.SignalKeyManager.DecryptedPayload(
+                        text = content,
+                        attachments = null
+                    )
+                    val payloadStr = gson.toJson(payload)
+                    val target = recipientBundles.first()
+                    val envelope = skm.encryptMessage(recipientUserId, target.deviceId, payloadStr, tempId)
+
+                    sendQueueMessage(
+                        conversationId = conversationId,
+                        recipientUserId = recipientUserId,
+                        recipientDeviceId = target.deviceId,
+                        ciphertextBase64 = envelope.ciphertext,
+                        ciphertextType = if (envelope.messageType == 3) "prekey" else "whisper",
+                        clientMessageId = tempId,
+                        decryptedContent = content
+                    )
+                } else {
+                    messageDao.insert(localMsg.copy(syncStatus = "failed"))
+                }
+            } catch (e2: Exception) {
+                e2.printStackTrace()
+                messageDao.insert(localMsg.copy(syncStatus = "failed"))
+            }
             refreshConversationListMeta(conversationId)
         }
     }
@@ -732,17 +963,16 @@ class ChatRepository @JvmOverloads constructor(
     }
 
     suspend fun retryFailedMessages() {
+        val currentUserId = cachedUserId ?: preferencesManager.userId.first() ?: ""
         try {
             val failedList = messageDao.getMessagesBySyncStatus("failed")
             for (msg in failedList) {
+                val plain = msg.decryptedContent
                 try {
                     messageDao.insert(msg.copy(syncStatus = "pending"))
-
-                    val plain = msg.decryptedContent
                     if (msg.decryptionStatus == "failed" ||
                         plain == com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
                     ) {
-                        // Do not re-send undecryptable content
                         messageDao.insert(msg.copy(syncStatus = "failed"))
                         continue
                     }
@@ -790,8 +1020,11 @@ class ChatRepository @JvmOverloads constructor(
                     val localFile = msg.localFilePath
                     val localDeviceId = preferencesManager.getDeviceId() ?: msg.senderDeviceId
                     upsertMessage(
-                        response.toEntityForSender("sent", plain, localDeviceId)
-                            .copy(localFilePath = localFile)
+                        response.toEntityForSender(
+                            status = if (response.status == "queued") "queued" else "sent",
+                            knownPlaintext = plain,
+                            localDeviceId = localDeviceId
+                        ).copy(localFilePath = localFile)
                     )
 
                     val updatedConv = conversationDao.getById(msg.conversationId)
@@ -803,7 +1036,40 @@ class ChatRepository @JvmOverloads constructor(
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    messageDao.insert(msg.copy(syncStatus = "failed"))
+                    // Fall back to outbox for retry
+                    try {
+                        val localDeviceId = preferencesManager.getDeviceId() ?: msg.senderDeviceId
+                        val conv = conversationDao.getById(msg.conversationId)
+                        if (conv != null && msg.encryptedContent.isNotBlank() &&
+                            !com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(plain)
+                        ) {
+                            val skm = signalKeyManager ?: continue
+                            val recipientUsername = conv.username ?: continue
+                            val recipientUserId = getOrResolveUserId(recipientUsername)
+                            val bundles = skm.fetchPreKeyBundles(recipientUserId)
+                            if (bundles.isNotEmpty()) {
+                                skm.registerDeviceKeysIfNecessary(currentUserId, localDeviceId)
+                                val gson = com.google.gson.Gson()
+                                val payload = com.whisprtext.app.crypto.SignalKeyManager.DecryptedPayload(
+                                    text = plain,
+                                    attachments = null
+                                )
+                                val payloadStr = gson.toJson(payload)
+                                val target = bundles.first()
+                                val envelope = skm.encryptMessage(recipientUserId, target.deviceId, payloadStr, msg.id)
+                                sendQueueMessage(
+                                    conversationId = msg.conversationId,
+                                    recipientUserId = recipientUserId,
+                                    recipientDeviceId = target.deviceId,
+                                    ciphertextBase64 = envelope.ciphertext,
+                                    clientMessageId = msg.id,
+                                    decryptedContent = plain
+                                )
+                            }
+                        }
+                    } catch (e2: Exception) {
+                        messageDao.insert(msg.copy(syncStatus = "failed"))
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -814,10 +1080,11 @@ class ChatRepository @JvmOverloads constructor(
     private fun getStatusPrecedence(status: String): Int {
         return when (status) {
             "pending" -> 0
-            "failed" -> 1
-            "sent" -> 2
-            "delivered" -> 3
-            "read" -> 4
+            "queued" -> 1
+            "failed" -> 2
+            "sent" -> 3
+            "delivered" -> 4
+            "read" -> 5
             else -> -1
         }
     }
@@ -1449,14 +1716,18 @@ class ChatRepository @JvmOverloads constructor(
         messageDao.insert(localMsg)
         refreshConversationListMeta(conversationId)
 
+        val localDeviceId = preferencesManager.getDeviceId() ?: senderDeviceId
+        var initRes: com.whisprtext.app.data.remote.model.MediaUploadInitResponse? = null
+        val attDtos = mutableListOf<com.whisprtext.app.data.remote.model.AttachmentDto>()
+
         try {
             // Step 1-3: Upload primary media
-            val initRes = apiClient.initMediaUpload(mimeType, encryptedBytes.size.toLong())
+            initRes = apiClient.initMediaUpload(mimeType, encryptedBytes.size.toLong())
             val uploadSuccess = apiClient.uploadEncryptedFile(initRes.uploadUrl, encryptedBytes)
             if (!uploadSuccess) throw Exception("Failed to upload encrypted file bytes")
             apiClient.completeMediaUpload(initRes.fileId, initRes.fileUrl)
 
-            val attDtos = mutableListOf(
+            attDtos.add(
                 com.whisprtext.app.data.remote.model.AttachmentDto(
                     id = UUID.randomUUID().toString(),
                     messageId = tempId,
@@ -1505,8 +1776,11 @@ class ChatRepository @JvmOverloads constructor(
             )
 
             messageDao.deleteById(tempId)
-            val localDeviceId = preferencesManager.getDeviceId() ?: senderDeviceId
-            val finalEntity = response.toEntityForSender("sent", displayContent, localDeviceId).copy(
+            val finalEntity = response.toEntityForSender(
+                status = if (response.status == "queued") "queued" else "sent",
+                knownPlaintext = displayContent,
+                localDeviceId = localDeviceId
+            ).copy(
                 localFilePath = localFile.absolutePath,
                 attachmentUrl = attDtos.first().fileUrl,
                 mimeType = mimeType,
@@ -1517,7 +1791,47 @@ class ChatRepository @JvmOverloads constructor(
             refreshConversationListMeta(conversationId)
         } catch (e: Exception) {
             e.printStackTrace()
-            messageDao.insert(localMsg.copy(syncStatus = "failed"))
+            // Fall back to queue via outbox
+            try {
+                val skm = signalKeyManager ?: throw Exception("SignalKeyManager unavailable")
+                val conv = conversationDao.getById(conversationId) ?: throw Exception("Conversation not found")
+                val recipientUsername = conv.username ?: throw Exception("No recipient")
+                val recipientUserId = getOrResolveUserId(recipientUsername)
+                skm.registerDeviceKeysIfNecessary(senderId, localDeviceId)
+                val bundles = skm.fetchPreKeyBundles(recipientUserId)
+                if (bundles.isNotEmpty() && initRes != null && attDtos.isNotEmpty()) {
+                    val gson = com.google.gson.Gson()
+                    val attPayload = com.whisprtext.app.crypto.SignalKeyManager.AttachmentPayloadDto(
+                        objectKey = initRes.fileUrl,
+                        attachmentKey = MediaCrypto.bytesToHex(aesKey),
+                        nonce = "", digest = "",
+                        mimeType = mimeType, sizeBytes = plaintextBytes.size.toLong()
+                    )
+                    val payload = com.whisprtext.app.crypto.SignalKeyManager.DecryptedPayload(
+                        text = displayContent,
+                        attachments = listOf(attPayload)
+                    )
+                    val payloadStr = gson.toJson(payload)
+                    val target = bundles.first()
+                    val envelope = skm.encryptMessage(recipientUserId, target.deviceId, payloadStr, tempId)
+                    sendQueueMessage(
+                        conversationId = conversationId,
+                        recipientUserId = recipientUserId,
+                        recipientDeviceId = target.deviceId,
+                        ciphertextBase64 = envelope.ciphertext,
+                        clientMessageId = tempId,
+                        decryptedContent = displayContent,
+                        localFilePath = localFile.absolutePath,
+                        mimeType = mimeType,
+                        sizeBytes = plaintextBytes.size.toLong(),
+                        attachmentUrl = attDtos.first().fileUrl,
+                        encryptedKey = MediaCrypto.bytesToHex(aesKey)
+                    )
+                }
+            } catch (e2: Exception) {
+                e2.printStackTrace()
+                messageDao.insert(localMsg.copy(syncStatus = "failed"))
+            }
             refreshConversationListMeta(conversationId)
         }
     }

@@ -15,6 +15,9 @@ interface MessageDao {
     @Query("UPDATE messages SET syncStatus = 'read' WHERE conversationId = :conversationId AND senderId != :currentUserId AND syncStatus != 'read'")
     suspend fun markConversationMessagesRead(conversationId: String, currentUserId: String): Unit
 
+    @Query("UPDATE messages SET syncStatus = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, status: String): Unit
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: MessageEntity): Unit
 
