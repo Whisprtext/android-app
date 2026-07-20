@@ -35,8 +35,8 @@ object AppearancePresets {
             surfaceColorDark = Color(0xFF25233A),
             selfBubbleColorLight = Color(0xFFD7BAFF),
             selfBubbleColorDark = Color(0xFF673B91),
-            otherBubbleColorLight = Color(0xFFE7E0EB),
-            otherBubbleColorDark = Color(0xFF25233A)
+            otherBubbleColorLight = Color(0xFFF3EAF8),
+            otherBubbleColorDark = Color(0xFF2D2A45)
         ),
         WhisprTheme(
             id = "whispr_pink",
@@ -49,8 +49,8 @@ object AppearancePresets {
             surfaceColorDark = Color(0xFF3D2531),
             selfBubbleColorLight = Color(0xFFF3A7D8),
             selfBubbleColorDark = Color(0xFF772B5B),
-            otherBubbleColorLight = Color(0xFFFFD8EC),
-            otherBubbleColorDark = Color(0xFF3D2531)
+            otherBubbleColorLight = Color(0xFFFFE4F3),
+            otherBubbleColorDark = Color(0xFF4A2D3C)
         ),
         WhisprTheme(
             id = "whispr_ocean",
@@ -63,8 +63,8 @@ object AppearancePresets {
             surfaceColorDark = Color(0xFF25313D),
             selfBubbleColorLight = Color(0xFFA7D8FF),
             selfBubbleColorDark = Color(0xFF004C70),
-            otherBubbleColorLight = Color(0xFFD6F0FF),
-            otherBubbleColorDark = Color(0xFF25313D)
+            otherBubbleColorLight = Color(0xFFE1F5FE),
+            otherBubbleColorDark = Color(0xFF2D3E4D)
         ),
         WhisprTheme(
             id = "whispr_cyan",
@@ -77,8 +77,8 @@ object AppearancePresets {
             surfaceColorDark = Color(0xFF253D3D),
             selfBubbleColorLight = Color(0xFF80DEEA),
             selfBubbleColorDark = Color(0xFF006064),
-            otherBubbleColorLight = Color(0xFFB2EBF2),
-            otherBubbleColorDark = Color(0xFF253D3D)
+            otherBubbleColorLight = Color(0xFFE0F7FA),
+            otherBubbleColorDark = Color(0xFF2E4545)
         ),
         WhisprTheme(
             id = "whispr_lavender",
@@ -91,8 +91,8 @@ object AppearancePresets {
             surfaceColorDark = Color(0xFF2D253D),
             selfBubbleColorLight = Color(0xFFB39DDB),
             selfBubbleColorDark = Color(0xFF512DA8),
-            otherBubbleColorLight = Color(0xFFEDE7F6),
-            otherBubbleColorDark = Color(0xFF2D253D)
+            otherBubbleColorLight = Color(0xFFF1E6FF),
+            otherBubbleColorDark = Color(0xFF382D4D)
         ),
         WhisprTheme(
             id = "sunset_gradient",
@@ -108,8 +108,8 @@ object AppearancePresets {
             gradientColorsDark = listOf(Color(0xFF3E2723), Color(0xFF4E342E)),
             selfBubbleColorLight = Color(0xFFFF9800),
             selfBubbleColorDark = Color(0xFFE65100),
-            otherBubbleColorLight = Color(0xFFFFE0B2).copy(alpha = 0.5f),
-            otherBubbleColorDark = Color(0xFF3E2723).copy(alpha = 0.5f)
+            otherBubbleColorLight = Color(0xFFFFF3E0),
+            otherBubbleColorDark = Color(0xFF5D4037)
         )
     )
 

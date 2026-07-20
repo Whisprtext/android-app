@@ -105,7 +105,7 @@ fun AppearanceScreen(
 
             // Demo Chat View
             Text("Preview", style = MaterialTheme.typography.titleMedium)
-            DemoChatView(currentTheme, settings.useDoodles, settings.doodleStyle, isDark)
+            DemoChatView(currentTheme, settings.useDoodles, settings.showChatBubbles, settings.doodleStyle, isDark)
 
             // Background Color Selection
             Text("Theme", style = MaterialTheme.typography.titleMedium)
@@ -123,40 +123,66 @@ fun AppearanceScreen(
                 }
             }
 
-            // Doodle Options
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            // Options
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Chat Bubbles Toggle
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.updateShowChatBubbles(!settings.showChatBubbles) }
+                            .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text("Chat Doodles", style = MaterialTheme.typography.bodyLarge)
-                            Text("Add subtle patterns to background", style = MaterialTheme.typography.bodySmall)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Chat Bubbles", style = MaterialTheme.typography.bodyLarge)
+                            Text("Show background for messages", style = MaterialTheme.typography.bodySmall)
                         }
                         Switch(
-                            checked = settings.useDoodles,
-                            onCheckedChange = { viewModel.updateDoodles(it) }
+                            checked = settings.showChatBubbles,
+                            onCheckedChange = { viewModel.updateShowChatBubbles(it) }
                         )
                     }
+                }
 
-                    if (settings.useDoodles) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Doodle Style", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
+                // Doodle Options
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            (0..3).forEach { styleIndex ->
-                                DoodleStyleOption(
-                                    style = styleIndex,
-                                    isSelected = settings.doodleStyle == styleIndex,
-                                    onClick = { viewModel.updateDoodleStyle(styleIndex) }
-                                )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Chat Doodles", style = MaterialTheme.typography.bodyLarge)
+                                Text("Add subtle patterns to background", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(
+                                checked = settings.useDoodles,
+                                onCheckedChange = { viewModel.updateDoodles(it) }
+                            )
+                        }
+
+                        if (settings.useDoodles) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Doodle Style", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                (0..3).forEach { styleIndex ->
+                                    DoodleStyleOption(
+                                        style = styleIndex,
+                                        isSelected = settings.doodleStyle == styleIndex,
+                                        onClick = { viewModel.updateDoodleStyle(styleIndex) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -170,6 +196,7 @@ fun AppearanceScreen(
 fun DemoChatView(
     theme: WhisprTheme,
     useDoodles: Boolean,
+    showChatBubbles: Boolean,
     doodleStyle: Int,
     isDark: Boolean
 ) {
@@ -206,7 +233,8 @@ fun DemoChatView(
                 isGroupHeader = true,
                 isGroupFooter = true,
                 theme = theme,
-                isDark = isDark
+                isDark = isDark,
+                showBubbles = showChatBubbles
             )
             ChatBubble(
                 content = MarkdownParser.parse("It looks amazing! So clean.", hideMarkers = true),
@@ -216,6 +244,7 @@ fun DemoChatView(
                 isGroupFooter = true,
                 theme = theme,
                 isDark = isDark,
+                showBubbles = showChatBubbles,
                 syncStatus = "read"
             )
         }

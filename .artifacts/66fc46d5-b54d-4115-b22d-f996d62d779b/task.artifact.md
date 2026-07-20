@@ -1,0 +1,7 @@
+- [x] Update `AppearanceSettings` data model
+- [x] Update `AppearanceViewModel` with toggle logic
+- [x] Enhance `ChatBubble` component in `MessageBubble.kt` to render bubbles
+- [x] Add "Chat Bubbles" toggle to `AppearanceScreen`
+- [x] Pass `showChatBubbles` setting in `ChatScreen`
+- [x] Refine theme colors in `AppearancePresets` for better contrast
+- [x] Verify changes across all themes and modes

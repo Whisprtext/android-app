@@ -634,6 +634,7 @@ fun ChatScreen(
                                     isGroupFooter = isGroupFooter,
                                     theme = theme,
                                     isDark = isDark,
+                                    showBubbles = appearance.showChatBubbles,
                                     showTimestamp = showTimestampIndices.contains(message.id),
                                     onLongClick = remember(message.id) { { messageToDelete = message } }
                                 )
@@ -1014,6 +1015,7 @@ fun MessageBubble(
     isGroupFooter: Boolean,
     theme: WhisprTheme,
     isDark: Boolean,
+    showBubbles: Boolean,
     showTimestamp: Boolean = true,
     onLongClick: () -> Unit
 ) {
@@ -1143,6 +1145,7 @@ fun MessageBubble(
         isGroupFooter = isGroupFooter,
         theme = theme,
         isDark = isDark,
+        showBubbles = showBubbles,
         syncStatus = message.syncStatus,
         showTimestamp = showTimestamp,
         onLongClick = onLongClick,

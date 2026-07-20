@@ -34,6 +34,13 @@ class AppearanceViewModel(
         }
     }
 
+    fun updateShowChatBubbles(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = appearanceSettings.value
+            preferencesManager.saveAppearanceSettings(current.copy(showChatBubbles = enabled))
+        }
+    }
+
     fun updateDoodleStyle(style: Int) {
         viewModelScope.launch {
             val current = appearanceSettings.value
