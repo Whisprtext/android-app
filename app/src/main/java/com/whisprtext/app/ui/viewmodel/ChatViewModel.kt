@@ -214,6 +214,14 @@ class ChatViewModel(
         }
     }
 
+    fun sendStickerMessage(stickerPath: String, mimeType: String) {
+        sendMediaMessage(
+            uriString = stickerPath,
+            mimeType = mimeType,
+            content = "[Sticker]"
+        )
+    }
+
     suspend fun getDecryptedFilePath(message: MessageEntity): String? {
         return try {
             chatRepository.downloadAndDecryptMedia(message)

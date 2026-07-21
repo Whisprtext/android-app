@@ -10,30 +10,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.theme.IncomingBubbleShape
-import com.whisprtext.app.ui.theme.OutgoingBubbleShape
 import com.whisprtext.app.ui.theme.InterFontFamily
-import com.whisprtext.app.ui.theme.Motion
-
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.layoutId
-import androidx.compose.ui.unit.Dp
-import kotlin.math.max
+import com.whisprtext.app.ui.theme.OutgoingBubbleShape
+import com.whisprtext.app.ui.theme.WhisprTheme
+import com.whisprtext.app.util.EmojiStickerClassifier
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -48,8 +43,15 @@ fun ChatBubble(
     syncStatus: String? = null,
     showTimestamp: Boolean = true,
     onLongClick: (() -> Unit)? = null,
-    mediaContent: @Composable (() -> Unit)? = null
+    mediaContent: @Composable (() -> Unit)? = null,
+    mimeType: String? = null,
+    attachmentUrl: String? = null
 ) {
+    val isEmojiOnly = remember(content.text) { EmojiStickerClassifier.isEmojiOnly(content.text) }
+    val isStickerOnly = remember(mimeType, content.text) { EmojiStickerClassifier.isStickerOnly(mimeType, content.text) }
+    val isBorderlessSpecial = isEmojiOnly || isStickerOnly
+    val effectiveShowBubbles = showBubbles && !isBorderlessSpecial
+
     val bubbleColor = if (isSelf) {
         if (isDark) theme.selfBubbleColorDark else theme.selfBubbleColorLight
     } else {
@@ -70,7 +72,7 @@ fun ChatBubble(
         if (avgLuminance > 0.6) Color.Black else Color.White
     }
 
-    val textColor = if (showBubbles) onBubbleColor else (if (isDark) Color.White else Color.Black)
+    val textColor = if (effectiveShowBubbles) onBubbleColor else (if (isDark) Color.White else Color.Black)
     val alignment = if (isSelf) Alignment.End else Alignment.Start
 
     val textStyle = remember(textColor, isSelf) {
@@ -83,9 +85,9 @@ fun ChatBubble(
     }
 
     val isMediaOnly = (content.text.isEmpty() || content.text == "[Media]") && mediaContent != null
-    val showTail = showTimestamp && !isMediaOnly
+    val showTail = showTimestamp && !isMediaOnly && effectiveShowBubbles
 
-    val shape = if (showBubbles) {
+    val shape = if (effectiveShowBubbles) {
         if (isMediaOnly) {
             RoundedCornerShape(20.dp)
         } else {
@@ -100,16 +102,16 @@ fun ChatBubble(
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .padding(horizontal = 12.dp, vertical = if (showBubbles) 2.dp else 4.dp),
+                .padding(horizontal = 12.dp, vertical = if (effectiveShowBubbles) 2.dp else 4.dp),
             horizontalAlignment = alignment
         ) {
             Surface(
-                color = if (showBubbles && !isMediaOnly && bubbleGradient.size < 2) bubbleColor else Color.Transparent,
-                border = if (showBubbles && isMediaOnly) androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)) else null,
+                color = if (effectiveShowBubbles && !isMediaOnly && bubbleGradient.size < 2) bubbleColor else Color.Transparent,
+                border = if (effectiveShowBubbles && isMediaOnly) androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)) else null,
                 shape = shape,
                 modifier = Modifier
                     .then(
-                        if (showBubbles && !isMediaOnly && bubbleGradient.size >= 2) {
+                        if (effectiveShowBubbles && !isMediaOnly && bubbleGradient.size >= 2) {
                             val startOffset = if (isSelf) androidx.compose.ui.geometry.Offset.Zero else androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
                             val endOffset = if (isSelf) androidx.compose.ui.geometry.Offset.Infinite else androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
                             Modifier.background(
@@ -131,35 +133,44 @@ fun ChatBubble(
                         } else Modifier
                     )
             ) {
-                val showText = content.text.isNotEmpty() && content.text != "[Media]"
-                ChatBubbleLayout(
-                    isSelf = isSelf,
-                    showBubbles = showBubbles,
-                    isMediaOnly = isMediaOnly,
-                    showTail = showTail,
-                    tailWidth = 18.dp,
-                    horizontalPadding = if (isMediaOnly) 0.dp else 2.dp,
-                    verticalPadding = if (isMediaOnly) 0.dp else 10.dp,
-                    messageContent = {
-                        Column(horizontalAlignment = alignment) {
-                            if (mediaContent != null) {
-                                Box(modifier = Modifier.padding(bottom = if (showText) 6.dp else 0.dp)) {
-                                    mediaContent()
+                if (isEmojiOnly) {
+                    AnimatedEmojiMessage(text = content.text)
+                } else if (isStickerOnly) {
+                    AnimatedStickerMessage(
+                        stickerUrlOrPath = attachmentUrl ?: content.text,
+                        mimeType = mimeType
+                    )
+                } else {
+                    val showText = content.text.isNotEmpty() && content.text != "[Media]"
+                    ChatBubbleLayout(
+                        isSelf = isSelf,
+                        showBubbles = effectiveShowBubbles,
+                        isMediaOnly = isMediaOnly,
+                        showTail = showTail,
+                        tailWidth = 18.dp,
+                        horizontalPadding = if (isMediaOnly) 0.dp else 2.dp,
+                        verticalPadding = if (isMediaOnly) 0.dp else 10.dp,
+                        messageContent = {
+                            Column(horizontalAlignment = alignment) {
+                                if (mediaContent != null) {
+                                    Box(modifier = Modifier.padding(bottom = if (showText) 6.dp else 0.dp)) {
+                                        mediaContent()
+                                    }
+                                }
+                                if (showText) {
+                                    Text(
+                                        text = content,
+                                        style = textStyle,
+                                        modifier = Modifier.wrapContentWidth()
+                                    )
                                 }
                             }
-                            if (showText) {
-                                Text(
-                                    text = content,
-                                    style = textStyle,
-                                    modifier = Modifier.wrapContentWidth()
-                                )
-                            }
                         }
-                    }
-                )
+                    )
+                }
             }
 
-            if (showTimestamp && showBubbles) {
+            if (showTimestamp && effectiveShowBubbles) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -178,7 +189,7 @@ fun ChatBubble(
                 }
             }
 
-            if (showTimestamp && !showBubbles) {
+            if (showTimestamp && !effectiveShowBubbles) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -219,7 +230,6 @@ private fun ChatBubbleLayout(
         val hp = horizontalPadding.toPx()
         val vp = verticalPadding.toPx()
 
-        // Estimate overhead for semi-circular ends.
         val estimatedPillDiameter = if (isMediaOnly) 0f else 100f 
         val overheadX = tw + (if (isMediaOnly) 0f else 2 * hp + estimatedPillDiameter)
         
@@ -236,7 +246,6 @@ private fun ChatBubbleLayout(
             val h = contentPlaceable.height + 2 * vp + th
             val pillRadius = if (isMediaOnly) 0f else (h - th) / 2f
             
-            // Total width perfectly wraps the text + padding + semi-circles + tail
             val totalWidth = contentPlaceable.width + tw + (2 * pillRadius) + (2 * hp)
 
             layout(totalWidth.toInt(), h.toInt()) {

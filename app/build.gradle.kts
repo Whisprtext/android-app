@@ -76,6 +76,8 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.coroutines.android)
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")
+    implementation("com.airbnb.android:lottie-compose:6.4.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
     // Firebase (Cloud Messaging for push notifications)

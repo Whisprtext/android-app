@@ -41,6 +41,7 @@ import androidx.compose.foundation.text.BasicTextField
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.ui.component.ChatBubble
 import com.whisprtext.app.ui.component.InitialsAvatar
+import com.whisprtext.app.ui.component.StickerEmojiPickerBottomSheet
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.theme.Motion
@@ -131,6 +132,7 @@ fun ChatScreen(
     var textMessage by remember { mutableStateOf(TextFieldValue("")) }
     var messageToDelete by remember { mutableStateOf<MessageEntity?>(null) }
     var isHeaderExpanded by remember { mutableStateOf(false) }
+    var showPickerSheet by remember { mutableStateOf(false) }
 
     val headerHeight by animateDpAsState(
         targetValue = if (isHeaderExpanded) 320.dp else 0.dp,
@@ -387,6 +389,7 @@ fun ChatScreen(
                             onTextMessageChange = ::onTextMessageChange,
                             markdownTransformation = markdownTransformation,
                             isLoading = uiState.isLoading,
+                            onEmojiClick = { showPickerSheet = true },
                             onMediaClick = ::launchMediaPicker,
                             onSendClick = {
                                 viewModel.sendMessage(textMessage.text)
@@ -397,6 +400,21 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (showPickerSheet) {
+        StickerEmojiPickerBottomSheet(
+            onDismissRequest = { showPickerSheet = false },
+            onEmojiSelect = { emoji ->
+                val currentText = textMessage.text
+                val newText = currentText + emoji
+                textMessage = TextFieldValue(newText, androidx.compose.ui.text.TextRange(newText.length))
+            },
+            onStickerSelect = { sticker ->
+                showPickerSheet = false
+                viewModel.sendStickerMessage(sticker.path, sticker.mimeType)
+            }
+        )
     }
 
     if (messageToDelete != null) {
@@ -609,6 +627,7 @@ fun ChatInputBar(
     onTextMessageChange: (TextFieldValue) -> Unit,
     markdownTransformation: VisualTransformation,
     isLoading: Boolean,
+    onEmojiClick: () -> Unit,
     onMediaClick: () -> Unit,
     onSendClick: () -> Unit
 ) {
@@ -620,7 +639,7 @@ fun ChatInputBar(
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.1f)
         ) {
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                IconButton(onClick = { }, modifier = Modifier.size(32.dp).align(Alignment.CenterVertically)) {
+                IconButton(onClick = onEmojiClick, modifier = Modifier.size(32.dp).align(Alignment.CenterVertically)) {
                     Icon(Icons.Default.SentimentSatisfiedAlt, contentDescription = "Emoji", modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onMediaClick, modifier = Modifier.size(32.dp).align(Alignment.CenterVertically)) {
@@ -750,6 +769,8 @@ fun MessageBubble(
         showTimestamp = uiModel.showTimestamp,
         onLongClick = onLongClick,
         mediaContent = mediaContent,
+        mimeType = message.mimeType,
+        attachmentUrl = message.attachmentUrl ?: message.localFilePath,
         modifier = modifier
     )
 
