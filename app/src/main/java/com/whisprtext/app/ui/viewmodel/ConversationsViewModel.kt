@@ -61,6 +61,13 @@ class ConversationsViewModel(
     init {
         sync()
         ensureLocalOwnProfile()
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            chatRepository.getConversations().collect { conversations ->
+                conversations.forEach { conv ->
+                    chatRepository.preloadMessages(conv.id)
+                }
+            }
+        }
     }
 
     /**

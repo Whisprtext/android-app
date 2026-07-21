@@ -27,6 +27,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.UUID
@@ -61,7 +63,21 @@ class ChatRepository @JvmOverloads constructor(
      * here and applied when the message is eventually inserted by upsertMessage().
      */
     private val pendingReceipts = ConcurrentHashMap<String, String>()
+    private val messageCache = ConcurrentHashMap<String, List<MessageEntity>>()
     private val notificationHelper = appContext?.let { NotificationHelper(it) }
+
+    fun getCachedMessages(conversationId: String): List<MessageEntity> = messageCache[conversationId] ?: emptyList()
+
+    suspend fun preloadMessages(conversationId: String) {
+        try {
+            val list = messageDao.getMessagesListDirect(conversationId)
+            if (list.isNotEmpty()) {
+                messageCache[conversationId] = list
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     /** Maximum number of HTTP delivery attempts before a pending receipt is abandoned. */
     private val MAX_RECEIPT_ATTEMPTS = 10
@@ -460,7 +476,15 @@ class ChatRepository @JvmOverloads constructor(
 
     fun getConversations(): Flow<List<ConversationEntity>> = conversationDao.getConversationsFlow()
 
-    fun getMessages(conversationId: String): Flow<List<MessageEntity>> = messageDao.getMessagesForConversation(conversationId)
+    fun getMessages(conversationId: String): Flow<List<MessageEntity>> =
+        messageDao.getMessagesForConversation(conversationId)
+            .onEach { list -> messageCache[conversationId] = list }
+            .onStart {
+                val cached = getCachedMessages(conversationId)
+                if (cached.isNotEmpty()) {
+                    emit(cached)
+                }
+            }
 
     suspend fun syncConversations() {
         try {

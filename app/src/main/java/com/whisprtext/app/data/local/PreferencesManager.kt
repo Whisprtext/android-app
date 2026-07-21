@@ -9,6 +9,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.whisprtext.app.data.model.AppearanceSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -39,6 +43,15 @@ class PreferencesManager(private val context: Context) {
     }
 
     private val gson = Gson()
+    private val managerScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
+
+    @Volatile
+    var cachedAppearanceSettings: AppearanceSettings = AppearanceSettings()
+        private set
+
+    @Volatile
+    var cachedUserId: String? = null
+        private set
 
     val appearanceSettings: Flow<AppearanceSettings> = context.dataStore.data.map { preferences ->
         val json = preferences[KEY_APPEARANCE_SETTINGS]
@@ -53,7 +66,25 @@ class PreferencesManager(private val context: Context) {
         }
     }.distinctUntilChanged()
 
+    val userId: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_USER_ID]
+    }
+
+    init {
+        managerScope.launch {
+            appearanceSettings.collect { settings ->
+                cachedAppearanceSettings = settings
+            }
+        }
+        managerScope.launch {
+            userId.collect { id ->
+                cachedUserId = id
+            }
+        }
+    }
+
     suspend fun saveAppearanceSettings(settings: AppearanceSettings) {
+        cachedAppearanceSettings = settings
         context.dataStore.edit { preferences ->
             preferences[KEY_APPEARANCE_SETTINGS] = gson.toJson(settings)
         }
@@ -91,10 +122,6 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun getDeviceId(): String? = deviceId.first()
-
-    val userId: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[KEY_USER_ID]
-    }
 
     val username: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[KEY_USERNAME]
@@ -165,6 +192,7 @@ class PreferencesManager(private val context: Context) {
         avatarUrl: String? = null,
         deviceId: String? = null
     ) {
+        cachedUserId = userId
         context.dataStore.edit { preferences ->
             preferences[KEY_SESSION_TOKEN] = token
             preferences[KEY_USER_ID] = userId
@@ -224,6 +252,7 @@ class PreferencesManager(private val context: Context) {
         discoverableByUsername: Boolean = true,
         discoverableByPhone: Boolean = true
     ) {
+        if (userId != null) cachedUserId = userId
         context.dataStore.edit { preferences ->
             if (userId != null) preferences[KEY_USER_ID] = userId
             preferences[KEY_USERNAME] = username
@@ -282,6 +311,7 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun clearSession() {
+        cachedUserId = null
         context.dataStore.edit { preferences ->
             preferences.remove(KEY_SESSION_TOKEN)
             preferences.remove(KEY_USER_ID)

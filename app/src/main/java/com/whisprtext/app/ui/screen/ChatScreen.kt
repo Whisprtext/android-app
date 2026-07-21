@@ -269,16 +269,6 @@ fun ChatScreen(
         textMessage = newValue
     }
 
-    var isRevealed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        isRevealed = true
-    }
-    val textRevealAlpha by animateFloatAsState(
-        targetValue = if (isRevealed) 1f else 0.2f,
-        animationSpec = tween(Motion.ScreenSlideDuration, easing = Motion.ScreenSlideEasing),
-        label = "TextRevealAlpha"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -332,9 +322,7 @@ fun ChatScreen(
                         } else {
                             LazyColumn(
                                 state = listState,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer { alpha = textRevealAlpha },
+                                modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(vertical = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                                 reverseLayout = true

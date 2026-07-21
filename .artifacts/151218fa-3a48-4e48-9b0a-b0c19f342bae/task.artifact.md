@@ -1,0 +1,2 @@
+- `[x]` Fix NPE in `PreferencesManager.kt` by reordering properties
+- `[x]` Build and verify the app no longer crashes

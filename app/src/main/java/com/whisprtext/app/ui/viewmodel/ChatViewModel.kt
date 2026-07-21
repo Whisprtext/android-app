@@ -47,7 +47,7 @@ class ChatViewModel(
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
     private val _otherUser = MutableStateFlow<UserDto?>(null)
-    private val _userId = MutableStateFlow("")
+    private val _userId = MutableStateFlow(preferencesManager.cachedUserId.orEmpty())
 
     val uiState: StateFlow<ChatUiState> = combine(
         chatRepository.getMessages(conversationId),
@@ -68,77 +68,7 @@ class ChatViewModel(
         val appearance = flowResults[6] as AppearanceSettings
         val currentUserId = flowResults[7] as String
 
-        // Transform messages to MessageUiModel
-        val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
-        val zoneId = java.time.ZoneId.systemDefault()
-        
-        // 1. Determine which messages show timestamps (chronological processing)
-        val chronological = messages.reversed()
-        val showTimestampIds = mutableSetOf<String>()
-        if (chronological.isNotEmpty()) {
-            var currentBlockSender = chronological[0].senderId
-            var lastMessageTimeInBlock = chronological[0].createdAt
-            var currentBlockCount = 0
-
-            for (i in chronological.indices) {
-                val msg = chronological[i]
-                val timeGap = msg.createdAt - lastMessageTimeInBlock
-                val senderChanged = msg.senderId != currentBlockSender
-                val timeGapExceeded = i > 0 && timeGap >= 300_000
-                val countExceeded = currentBlockCount >= 10
-
-                if (senderChanged || timeGapExceeded || countExceeded) {
-                    if (i > 0) showTimestampIds.add(chronological[i - 1].id)
-                    currentBlockSender = msg.senderId
-                    lastMessageTimeInBlock = msg.createdAt
-                    currentBlockCount = 1
-                } else {
-                    currentBlockCount++
-                    lastMessageTimeInBlock = msg.createdAt
-                }
-            }
-            showTimestampIds.add(chronological.last().id)
-        }
-
-        // 2. Map to UI Model
-        val messageUiModels = messages.mapIndexed { index, message ->
-            val isSelf = message.senderId == currentUserId
-            
-            val isSameSenderAsNext = index < messages.size - 1 &&
-                    messages[index].senderId == messages[index + 1].senderId
-            val isWithinTimeAsNext = index < messages.size - 1 &&
-                    Math.abs(messages[index].createdAt - messages[index + 1].createdAt) < 300_000
-
-            val isSameSenderAsPrev = index > 0 &&
-                    messages[index].senderId == messages[index - 1].senderId
-            val isWithinTimeAsPrev = index > 0 &&
-                    Math.abs(messages[index].createdAt - messages[index - 1].createdAt) < 300_000
-
-            val isGroupHeader = !(isSameSenderAsNext && isWithinTimeAsNext)
-            val isGroupFooter = !(isSameSenderAsPrev && isWithinTimeAsPrev)
-
-            val raw = message.decryptedContent
-            val displayText = when {
-                message.decryptionStatus == "failed" || message.isDecryptionFailed ->
-                    com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
-                com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(raw) ->
-                    com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
-                else -> raw
-            }
-
-            MessageUiModel(
-                message = message,
-                parsedContent = MarkdownParser.parse(displayText, hideMarkers = true),
-                time = java.time.LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(message.createdAt),
-                    zoneId
-                ).format(timeFormatter),
-                isSelf = isSelf,
-                isGroupHeader = isGroupHeader,
-                isGroupFooter = isGroupFooter,
-                showTimestamp = showTimestampIds.contains(message.id)
-            )
-        }
+        val messageUiModels = transformMessagesToUiModels(messages, currentUserId)
 
         // Prefer live conversation.avatarUrl (updated when profile is refreshed) over stale otherUser.
         val mergedOther = when {
@@ -170,7 +100,7 @@ class ChatViewModel(
     }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ChatUiState(isLoading = false)
+        initialValue = buildInitialUiState(conversationId, chatRepository, preferencesManager)
     )
 
     val currentUserId: StateFlow<String> = _userId
@@ -290,6 +220,105 @@ class ChatViewModel(
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    companion object {
+        fun transformMessagesToUiModels(
+            messages: List<MessageEntity>,
+            currentUserId: String
+        ): List<MessageUiModel> {
+            val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+            val zoneId = java.time.ZoneId.systemDefault()
+
+            val chronological = messages.reversed()
+            val showTimestampIds = mutableSetOf<String>()
+            if (chronological.isNotEmpty()) {
+                var currentBlockSender = chronological[0].senderId
+                var lastMessageTimeInBlock = chronological[0].createdAt
+                var currentBlockCount = 0
+
+                for (i in chronological.indices) {
+                    val msg = chronological[i]
+                    val timeGap = msg.createdAt - lastMessageTimeInBlock
+                    val senderChanged = msg.senderId != currentBlockSender
+                    val timeGapExceeded = i > 0 && timeGap >= 300_000
+                    val countExceeded = currentBlockCount >= 10
+
+                    if (senderChanged || timeGapExceeded || countExceeded) {
+                        if (i > 0) showTimestampIds.add(chronological[i - 1].id)
+                        currentBlockSender = msg.senderId
+                        lastMessageTimeInBlock = msg.createdAt
+                        currentBlockCount = 1
+                    } else {
+                        currentBlockCount++
+                        lastMessageTimeInBlock = msg.createdAt
+                    }
+                }
+                showTimestampIds.add(chronological.last().id)
+            }
+
+            return messages.mapIndexed { index, message ->
+                val isSelf = currentUserId.isNotEmpty() && message.senderId == currentUserId
+
+                val isSameSenderAsNext = index < messages.size - 1 &&
+                        messages[index].senderId == messages[index + 1].senderId
+                val isWithinTimeAsNext = index < messages.size - 1 &&
+                        Math.abs(messages[index].createdAt - messages[index + 1].createdAt) < 300_000
+
+                val isSameSenderAsPrev = index > 0 &&
+                        messages[index].senderId == messages[index - 1].senderId
+                val isWithinTimeAsPrev = index > 0 &&
+                        Math.abs(messages[index].createdAt - messages[index - 1].createdAt) < 300_000
+
+                val isGroupHeader = !(isSameSenderAsNext && isWithinTimeAsNext)
+                val isGroupFooter = !(isSameSenderAsPrev && isWithinTimeAsPrev)
+
+                val raw = message.decryptedContent
+                val displayText = when {
+                    message.decryptionStatus == "failed" || message.isDecryptionFailed ->
+                        com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+                    com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(raw) ->
+                        com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+                    else -> raw
+                }
+
+                MessageUiModel(
+                    message = message,
+                    parsedContent = MarkdownParser.parse(displayText, hideMarkers = true),
+                    time = java.time.LocalDateTime.ofInstant(
+                        java.time.Instant.ofEpochMilli(message.createdAt),
+                        zoneId
+                    ).format(timeFormatter),
+                    isSelf = isSelf,
+                    isGroupHeader = isGroupHeader,
+                    isGroupFooter = isGroupFooter,
+                    showTimestamp = showTimestampIds.contains(message.id)
+                )
+            }
+        }
+
+        fun buildInitialUiState(
+            conversationId: String,
+            chatRepository: ChatRepository,
+            preferencesManager: PreferencesManager
+        ): ChatUiState {
+            val cached = chatRepository.getCachedMessages(conversationId)
+            val initialUserId = preferencesManager.cachedUserId.orEmpty()
+            val initialAppearance = preferencesManager.cachedAppearanceSettings
+
+            if (cached.isEmpty()) return ChatUiState(
+                isLoading = false,
+                appearanceSettings = initialAppearance
+            )
+
+            val messageUiModels = transformMessagesToUiModels(cached, initialUserId)
+
+            return ChatUiState(
+                messages = messageUiModels,
+                isLoading = false,
+                appearanceSettings = initialAppearance
+            )
         }
     }
 }

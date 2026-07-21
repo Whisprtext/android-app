@@ -300,37 +300,16 @@ class MainActivity : ComponentActivity() {
                                 startDestination = Screen.ConversationList.route,
                                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                                 enterTransition = {
-                                    slideIntoContainer(
-                                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                        animationSpec = Motion.screenSlideSpec()
-                                    )
+                                    fadeIn(animationSpec = tween(200, easing = Motion.StandardEasing))
                                 },
                                 exitTransition = {
-                                    slideOutOfContainer(
-                                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                        animationSpec = Motion.screenSlideSpec(),
-                                        targetOffset = { 0 }
-                                    ) + fadeOut(
-                                        animationSpec = Motion.screenSlideSpec(),
-                                        targetAlpha = 0.82f
-                                    )
+                                    fadeOut(animationSpec = tween(200, easing = Motion.StandardEasing))
                                 },
                                 popEnterTransition = {
-                                    slideIntoContainer(
-                                        towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                        animationSpec = Motion.screenSlideSpec(),
-                                        initialOffset = { 0 }
-                                    ) + fadeIn(
-                                        animationSpec = Motion.screenSlideSpec(),
-                                        initialAlpha = 0.82f
-                                    )
+                                    fadeIn(animationSpec = tween(200, easing = Motion.StandardEasing))
                                 },
                                 popExitTransition = {
-                                    slideOutOfContainer(
-                                        towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                        animationSpec = Motion.screenSlideSpec(),
-                                        targetOffset = { fullWidth -> fullWidth }
-                                    )
+                                    fadeOut(animationSpec = tween(200, easing = Motion.StandardEasing))
                                 }
                             ) {
                                 composable(Screen.ConversationList.route) {

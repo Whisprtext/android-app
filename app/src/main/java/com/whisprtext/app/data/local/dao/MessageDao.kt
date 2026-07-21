@@ -12,6 +12,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC")
     fun getMessagesForConversation(conversationId: String): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt DESC")
+    suspend fun getMessagesListDirect(conversationId: String): List<MessageEntity>
+
     @Query("UPDATE messages SET syncStatus = 'read' WHERE conversationId = :conversationId AND senderId != :currentUserId AND syncStatus != 'read'")
     suspend fun markConversationMessagesRead(conversationId: String, currentUserId: String): Unit
 
