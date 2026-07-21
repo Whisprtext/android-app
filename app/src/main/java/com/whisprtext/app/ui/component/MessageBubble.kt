@@ -102,7 +102,7 @@ fun ChatBubble(
         Column(
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .padding(horizontal = 12.dp, vertical = if (effectiveShowBubbles) 2.dp else 4.dp),
+                .padding(horizontal = 12.dp, vertical = if (effectiveShowBubbles) 1.dp else 4.dp),
             horizontalAlignment = alignment
         ) {
             Surface(
@@ -171,11 +171,12 @@ fun ChatBubble(
             }
 
             if (showTimestamp && effectiveShowBubbles) {
-                Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .then(if (isSelf && showTail) Modifier.offset(y = (-8).dp) else Modifier)
                 ) {
                     Text(
                         text = time,
@@ -190,7 +191,6 @@ fun ChatBubble(
             }
 
             if (showTimestamp && !effectiveShowBubbles) {
-                Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)

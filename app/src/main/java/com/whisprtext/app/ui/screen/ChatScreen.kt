@@ -326,7 +326,7 @@ fun ChatScreen(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
                                 reverseLayout = true
                             ) {
                                 itemsIndexed(
@@ -340,7 +340,9 @@ fun ChatScreen(
                                         isDark = isDark,
                                         showBubbles = appearance.showChatBubbles,
                                         onLongClick = { messageToDelete = model.message },
-                                        modifier = Modifier.animateItem(),
+                                        modifier = Modifier
+                                            .animateItem()
+                                            .padding(top = if (model.isGroupHeader) 0.dp else 0.dp),
                                         onDownloadMedia = { viewModel.getDecryptedFilePath(it) }
                                     )
                                 }
