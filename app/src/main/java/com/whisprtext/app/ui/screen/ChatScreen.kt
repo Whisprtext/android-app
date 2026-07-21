@@ -132,19 +132,17 @@ fun ChatScreen(
     var messageToDelete by remember { mutableStateOf<MessageEntity?>(null) }
     var isHeaderExpanded by remember { mutableStateOf(false) }
 
-    val headerTransition = updateTransition(targetState = isHeaderExpanded, label = "HeaderExpansion")
-    val headerHeight by headerTransition.animateDp(
-        transitionSpec = {
-            if (targetState) tween(Motion.LongDuration3, easing = Motion.EmphasizedDecelerateEasing)
-            else tween(Motion.LongDuration3, easing = Motion.EmphasizedAccelerateEasing)
-        },
+    val headerHeight by animateDpAsState(
+        targetValue = if (isHeaderExpanded) 320.dp else 0.dp,
+        animationSpec = tween(Motion.LongDuration3, easing = Motion.EmphasizedDecelerateEasing),
         label = "HeaderHeight"
-    ) { expanded -> if (expanded) 320.dp else 0.dp }
+    )
 
-    val headerAlpha by headerTransition.animateFloat(
-        transitionSpec = { tween(Motion.MediumDuration2) },
+    val headerAlpha by animateFloatAsState(
+        targetValue = if (isHeaderExpanded) 1f else 0f,
+        animationSpec = tween(Motion.MediumDuration2),
         label = "HeaderAlpha"
-    ) { expanded -> if (expanded) 1f else 0f }
+    )
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -271,6 +269,16 @@ fun ChatScreen(
         textMessage = newValue
     }
 
+    var isRevealed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isRevealed = true
+    }
+    val textRevealAlpha by animateFloatAsState(
+        targetValue = if (isRevealed) 1f else 0.2f,
+        animationSpec = tween(Motion.ScreenSlideDuration, easing = Motion.ScreenSlideEasing),
+        label = "TextRevealAlpha"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -324,7 +332,9 @@ fun ChatScreen(
                         } else {
                             LazyColumn(
                                 state = listState,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = textRevealAlpha },
                                 contentPadding = PaddingValues(vertical = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                                 reverseLayout = true

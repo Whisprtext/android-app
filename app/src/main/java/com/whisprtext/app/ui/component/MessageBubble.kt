@@ -82,16 +82,6 @@ fun ChatBubble(
         )
     }
 
-    val animatedProgress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        animatedProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(Motion.MediumDuration2, easing = Motion.DecelerateEasing)
-        )
-    }
-
-    val animatedProgressValue = if (androidx.compose.ui.platform.LocalInspectionMode.current) 1f else animatedProgress.value
-
     val isMediaOnly = (content.text.isEmpty() || content.text == "[Media]") && mediaContent != null
     val showTail = showTimestamp && !isMediaOnly
 
@@ -104,12 +94,7 @@ fun ChatBubble(
     } else RoundedCornerShape(0.dp)
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                alpha = animatedProgressValue
-                translationX = (if (isSelf) 20.dp else (-20).dp).toPx() * (1f - animatedProgressValue)
-            },
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = alignment
     ) {
         Column(

@@ -298,36 +298,37 @@ class MainActivity : ComponentActivity() {
                             NavHost(
                                 navController = navController,
                                 startDestination = Screen.ConversationList.route,
+                                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                                 enterTransition = {
                                     slideIntoContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                        animationSpec = Motion.screenSlideSpringSpec()
+                                        animationSpec = Motion.screenSlideSpec()
                                     )
                                 },
                                 exitTransition = {
                                     slideOutOfContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                        animationSpec = Motion.screenSlideSpringSpec(),
-                                        targetOffset = { fullWidth -> -(fullWidth * Motion.ScreenParallaxFactor).toInt() }
+                                        animationSpec = Motion.screenSlideSpec(),
+                                        targetOffset = { 0 }
                                     ) + fadeOut(
-                                        animationSpec = Motion.screenSlideSpringSpec(),
-                                        targetAlpha = 0.88f
+                                        animationSpec = Motion.screenSlideSpec(),
+                                        targetAlpha = 0.82f
                                     )
                                 },
                                 popEnterTransition = {
                                     slideIntoContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                        animationSpec = Motion.screenSlideSpringSpec(),
-                                        initialOffset = { fullWidth -> -(fullWidth * Motion.ScreenParallaxFactor).toInt() }
+                                        animationSpec = Motion.screenSlideSpec(),
+                                        initialOffset = { 0 }
                                     ) + fadeIn(
-                                        animationSpec = Motion.screenSlideSpringSpec(),
-                                        initialAlpha = 0.88f
+                                        animationSpec = Motion.screenSlideSpec(),
+                                        initialAlpha = 0.82f
                                     )
                                 },
                                 popExitTransition = {
                                     slideOutOfContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                        animationSpec = Motion.screenSlideSpringSpec(),
+                                        animationSpec = Motion.screenSlideSpec(),
                                         targetOffset = { fullWidth -> fullWidth }
                                     )
                                 }
