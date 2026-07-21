@@ -23,6 +23,7 @@ data class MessageUiModel(
     val isSelf: Boolean,
     val isGroupHeader: Boolean,
     val isGroupFooter: Boolean,
+    val isSameSenderAsNext: Boolean,
     val showTimestamp: Boolean
 )
 
@@ -301,6 +302,7 @@ class ChatViewModel(
                     isSelf = isSelf,
                     isGroupHeader = isGroupHeader,
                     isGroupFooter = isGroupFooter,
+                    isSameSenderAsNext = isSameSenderAsNext,
                     showTimestamp = showTimestampIds.contains(message.id)
                 )
             }

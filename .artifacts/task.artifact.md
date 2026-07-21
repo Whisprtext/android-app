@@ -1,8 +1,9 @@
-# Tasks - Further Reduce Chat Gaps
+# Tasks - Fine-tune Chat Group Gaps
 
-- [x] Update `ChatScreen.kt` group header padding
-    - [x] Change `8.dp` to `6.dp`
-- [x] Update `MessageBubble.kt` internal spacing
-    - [x] Remove spacers before timestamp rows
-    - [x] Reduce vertical padding of message container from `2.dp` to `1.dp`
-- [x] Verify UI on device
+- [x] Update `MessageUiModel` and `ChatViewModel`
+    - [x] Add `isSameSenderAsNext` to `MessageUiModel`
+    - [x] Populate `isSameSenderAsNext` in `transformMessagesToUiModels`
+- [x] Update `ChatScreen.kt` padding logic
+    - [x] Use `2.dp` top padding for same-sender group breaks
+    - [x] Use `4.dp` top padding for different-sender group breaks
+- [x] Verify message spacing on device

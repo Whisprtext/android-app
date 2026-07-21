@@ -341,8 +341,7 @@ fun ChatScreen(
                                         showBubbles = appearance.showChatBubbles,
                                         onLongClick = { messageToDelete = model.message },
                                         modifier = Modifier
-                                            .animateItem()
-                                            .padding(top = if (model.isGroupHeader) 0.dp else 0.dp),
+                                            .animateItem(),
                                         onDownloadMedia = { viewModel.getDecryptedFilePath(it) }
                                     )
                                 }
