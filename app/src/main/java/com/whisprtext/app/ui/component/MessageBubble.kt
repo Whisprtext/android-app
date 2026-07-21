@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
@@ -32,7 +33,6 @@ import com.whisprtext.app.ui.theme.Motion
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import kotlin.math.max
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -56,10 +56,18 @@ fun ChatBubble(
         if (isDark) theme.otherBubbleColorDark else theme.otherBubbleColorLight
     }
 
-    val onBubbleColor = remember(bubbleColor) {
-        // Simple luminance check for text contrast
-        val luminance = (0.299 * bubbleColor.red + 0.587 * bubbleColor.green + 0.114 * bubbleColor.blue)
-        if (luminance > 0.5) Color.Black else Color.White
+    val bubbleGradient = if (isSelf) {
+        if (isDark) theme.selfBubbleGradientDark else theme.selfBubbleGradientLight
+    } else {
+        if (isDark) theme.otherBubbleGradientDark else theme.otherBubbleGradientLight
+    }
+
+    val onBubbleColor = remember(bubbleGradient, bubbleColor) {
+        val checkColors = if (bubbleGradient.isNotEmpty()) bubbleGradient else listOf(bubbleColor)
+        val avgLuminance = checkColors.map { 
+            (0.299 * it.red + 0.587 * it.green + 0.114 * it.blue)
+        }.average()
+        if (avgLuminance > 0.6) Color.Black else Color.White
     }
 
     val textColor = if (showBubbles) onBubbleColor else (if (isDark) Color.White else Color.Black)
@@ -82,6 +90,8 @@ fun ChatBubble(
         )
     }
 
+    val animatedProgressValue = if (androidx.compose.ui.platform.LocalInspectionMode.current) 1f else animatedProgress.value
+
     val isMediaOnly = (content.text.isEmpty() || content.text == "[Media]") && mediaContent != null
     val showTail = showTimestamp && !isMediaOnly
 
@@ -97,8 +107,8 @@ fun ChatBubble(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
-                alpha = animatedProgress.value
-                translationX = (if (isSelf) 20.dp else (-20).dp).toPx() * (1f - animatedProgress.value)
+                alpha = animatedProgressValue
+                translationX = (if (isSelf) 20.dp else (-20).dp).toPx() * (1f - animatedProgressValue)
             },
         horizontalAlignment = alignment
     ) {
@@ -109,12 +119,24 @@ fun ChatBubble(
             horizontalAlignment = alignment
         ) {
             Surface(
-                color = if (showBubbles) {
-                    if (isMediaOnly) Color.Transparent else bubbleColor
-                } else Color.Transparent,
+                color = if (showBubbles && !isMediaOnly && bubbleGradient.size < 2) bubbleColor else Color.Transparent,
                 border = if (showBubbles && isMediaOnly) androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)) else null,
                 shape = shape,
                 modifier = Modifier
+                    .then(
+                        if (showBubbles && !isMediaOnly && bubbleGradient.size >= 2) {
+                            val startOffset = if (isSelf) androidx.compose.ui.geometry.Offset.Zero else androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)
+                            val endOffset = if (isSelf) androidx.compose.ui.geometry.Offset.Infinite else androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
+                            Modifier.background(
+                                brush = Brush.linearGradient(
+                                    colors = bubbleGradient,
+                                    start = startOffset,
+                                    end = endOffset
+                                ),
+                                shape = shape
+                            )
+                        } else Modifier
+                    )
                     .then(
                         if (onLongClick != null) {
                             Modifier.combinedClickable(
@@ -264,4 +286,3 @@ private fun ChatStatusIndicator(syncStatus: String, color: Color) {
         color = statusColor
     )
 }
-

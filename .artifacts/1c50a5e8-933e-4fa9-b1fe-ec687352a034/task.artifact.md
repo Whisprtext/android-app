@@ -1,0 +1,6 @@
+- [x] Update `WhisprTheme` data class in `AppearancePresets.kt`
+- [x] Update theme presets in `AppearancePresets.kt` with bubble gradients
+- [x] Refine gradient color pairs in `AppearancePresets.kt` (Analogous/Nearby colors)
+- [x] Update `ChatBubble` in `MessageBubble.kt` for improved contrast check
+- [x] Set diagonal gradient directions in `MessageBubble.kt`
+- [x] Verify UI changes in both light and dark themes across all presets
