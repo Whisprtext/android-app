@@ -1,0 +1,5 @@
+- [x] Implement animation logic in `ChatBubble`
+- [x] Update `MessageBubble` signature and propagation
+- [x] Implement message animation tracking in `ChatScreen`
+- [x] Add previews for animation verification
+- [x] Verify implementation with previews

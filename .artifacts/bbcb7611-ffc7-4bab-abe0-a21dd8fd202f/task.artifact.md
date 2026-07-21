@@ -1,0 +1,5 @@
+- [x] Update `StickerEmojiPickerBottomSheet.kt` to add rounded corners to the header
+    - [x] Wrap `TabRow` in a `Surface` with `RoundedCornerShape(20.dp)`
+    - [x] Set `TabRow` colors to be transparent
+    - [x] Remove default divider
+- [x] Verify changes visually (via code review/preview if possible)

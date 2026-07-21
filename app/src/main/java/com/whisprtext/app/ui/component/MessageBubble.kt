@@ -9,14 +9,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -28,7 +30,9 @@ import com.whisprtext.app.ui.theme.IncomingBubbleShape
 import com.whisprtext.app.ui.theme.InterFontFamily
 import com.whisprtext.app.ui.theme.OutgoingBubbleShape
 import com.whisprtext.app.ui.theme.WhisprTheme
+import com.whisprtext.app.util.AccessibilityHelper
 import com.whisprtext.app.util.EmojiStickerClassifier
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -42,11 +46,42 @@ fun ChatBubble(
     showBubbles: Boolean = true,
     syncStatus: String? = null,
     showTimestamp: Boolean = true,
+    shouldAnimate: Boolean = false,
+    onAnimationComplete: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     mediaContent: @Composable (() -> Unit)? = null,
     mimeType: String? = null,
     attachmentUrl: String? = null
 ) {
+    val context = LocalContext.current
+    val reducedMotion = remember { AccessibilityHelper.isReducedMotionEnabled(context) }
+    
+    val animatedScale = remember { Animatable(if (shouldAnimate && !reducedMotion) 0.94f else 1.0f) }
+    val animatedAlpha = remember { Animatable(if (shouldAnimate && !reducedMotion) 0f else 1f) }
+
+    LaunchedEffect(shouldAnimate, reducedMotion) {
+        if (shouldAnimate && !reducedMotion) {
+            launch {
+                animatedScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                )
+            }
+            launch {
+                animatedAlpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 220)
+                )
+            }
+            // Wait for duration roughly
+            kotlinx.coroutines.delay(220)
+            onAnimationComplete?.invoke()
+        }
+    }
+
     val isEmojiOnly = remember(content.text) { EmojiStickerClassifier.isEmojiOnly(content.text) }
     val isStickerOnly = remember(mimeType, content.text) { EmojiStickerClassifier.isStickerOnly(mimeType, content.text) }
     val isBorderlessSpecial = isEmojiOnly || isStickerOnly
@@ -110,6 +145,14 @@ fun ChatBubble(
                 border = if (effectiveShowBubbles && isMediaOnly) androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)) else null,
                 shape = shape,
                 modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = animatedScale.value
+                        scaleY = animatedScale.value
+                        alpha = animatedAlpha.value
+                        transformOrigin = if (showTail) {
+                            if (isSelf) TransformOrigin(1f, 1f) else TransformOrigin(0f, 0f)
+                        } else TransformOrigin.Center
+                    }
                     .then(
                         if (effectiveShowBubbles && !isMediaOnly && bubbleGradient.size >= 2) {
                             val startOffset = if (isSelf) androidx.compose.ui.geometry.Offset.Zero else androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f)

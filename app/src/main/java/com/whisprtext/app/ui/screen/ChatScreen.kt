@@ -56,6 +56,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.launch
 import java.io.File
 import android.content.Intent
@@ -88,6 +89,16 @@ fun ChatScreen(
 
     val listState = rememberLazyListState()
     var isInitialLoad by remember { mutableStateOf(true) }
+    
+    val initialMessageIds = remember { mutableSetOf<String>() }
+    var hasCapturedInitialIds by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState.isLoading, uiState.messages) {
+        if (!uiState.isLoading && !hasCapturedInitialIds) {
+            initialMessageIds.addAll(uiState.messages.map { it.message.id })
+            hasCapturedInitialIds = true
+        }
+    }
 
     // Media picking logic
     val pickerLauncher = rememberLauncherForActivityResult(
@@ -334,12 +345,20 @@ fun ChatScreen(
                                     key = { _, model -> model.message.id },
                                     contentType = { _, _ -> "message" }
                                 ) { _, model ->
+                                    val messageId = model.message.id
+                                    var hasAnimated by rememberSaveable { mutableStateOf(false) }
+                                    val shouldAnimate = remember(messageId, hasCapturedInitialIds) {
+                                        hasCapturedInitialIds && !initialMessageIds.contains(messageId) && !hasAnimated
+                                    }
+
                                     MessageBubble(
                                         uiModel = model,
                                         theme = theme,
                                         isDark = isDark,
                                         showBubbles = appearance.showChatBubbles,
                                         onLongClick = { messageToDelete = model.message },
+                                        shouldAnimate = shouldAnimate,
+                                        onAnimationComplete = { hasAnimated = true },
                                         modifier = Modifier
                                             .animateItem(),
                                         onDownloadMedia = { viewModel.getDecryptedFilePath(it) }
@@ -695,6 +714,8 @@ fun MessageBubble(
     showBubbles: Boolean,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    shouldAnimate: Boolean = false,
+    onAnimationComplete: (() -> Unit)? = null,
     onDownloadMedia: (suspend (MessageEntity) -> String?)? = null
 ) {
     val message = uiModel.message
@@ -768,6 +789,8 @@ fun MessageBubble(
         showBubbles = showBubbles,
         syncStatus = message.syncStatus,
         showTimestamp = uiModel.showTimestamp,
+        shouldAnimate = shouldAnimate,
+        onAnimationComplete = onAnimationComplete,
         onLongClick = onLongClick,
         mediaContent = mediaContent,
         mimeType = message.mimeType,
