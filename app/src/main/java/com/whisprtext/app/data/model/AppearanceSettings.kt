@@ -7,8 +7,5 @@ enum class ThemeMode {
 data class AppearanceSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val presetId: String = "default",
-    val useDoodles: Boolean = true,
-    val showChatBubbles: Boolean = true,
-    val doodleStyle: Int = 0,
-    val doodleAlpha: Float = 0.1f
+    val showChatBubbles: Boolean = true
 )

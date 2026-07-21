@@ -316,6 +316,10 @@ class ApiClient(
                 throw IOException("Unexpected code ${response.code} with body: ${response.body?.string()}")
             }
             val body = response.body?.string() ?: throw IOException("Empty response body")
+            android.util.Log.d("ApiClient", "executeRequest: path=${request.url.encodedPath}, bodyLen=${body.length}")
+            if (body.isEmpty() || body == "null") {
+                throw IOException("Empty or null response body string")
+            }
             val result: T? = if (type != null) {
                 gson.fromJson(body, type)
             } else {

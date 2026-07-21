@@ -17,24 +17,47 @@ class WebSocketForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.d(TAG, "onCreate: starting foreground")
         createNotificationChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                buildNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification())
-        }
+        promoteToForeground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand: ensuring foreground")
+        promoteToForeground()
         val app = application as? WhisprTextApp
         if (app?.webSocketManager != null) {
             Log.d(TAG, "Foreground service active, WebSocket keepalive ensured")
         }
         return START_STICKY
+    }
+
+    private fun promoteToForeground() {
+        try {
+            val notification = buildNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            Log.d(TAG, "Successfully promoted to foreground")
+        } catch (e: Exception) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && e is android.app.ForegroundServiceStartNotAllowedException) {
+                Log.e(TAG, "Foreground service start not allowed from background. " +
+                        "This can happen if the app is restricted or battery optimized.", e)
+            } else {
+                Log.e(TAG, "Failed to start foreground: ${e.message}", e)
+            }
+            // If we failed to start foreground on Android 12+, we should probably stop ourselves
+            // to avoid the system killing us or throwing an exception later.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                stopSelf()
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -24,17 +24,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.whisprtext.app.ui.theme.WhisprTheme
+import com.whisprtext.app.ui.theme.IncomingBubbleShape
+import com.whisprtext.app.ui.theme.OutgoingBubbleShape
 import com.whisprtext.app.ui.theme.InterFontFamily
 import com.whisprtext.app.ui.theme.Motion
+
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import kotlin.math.max
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatBubble(
+    modifier: Modifier = Modifier,
     content: AnnotatedString,
     time: String,
     isSelf: Boolean,
-    isGroupHeader: Boolean,
-    isGroupFooter: Boolean,
     theme: WhisprTheme,
     isDark: Boolean,
     showBubbles: Boolean = true,
@@ -63,7 +70,7 @@ fun ChatBubble(
             color = textColor,
             fontSize = 16.sp,
             fontFamily = InterFontFamily,
-            textAlign = TextAlign.Start
+            textAlign = if (isSelf) TextAlign.End else TextAlign.Start
         )
     }
 
@@ -75,20 +82,19 @@ fun ChatBubble(
         )
     }
 
-    val cornerRadius = 18.dp
-    val sharpRadius = 4.dp
-    
+    val isMediaOnly = (content.text.isEmpty() || content.text == "[Media]") && mediaContent != null
+    val showTail = showTimestamp && !isMediaOnly
+
     val shape = if (showBubbles) {
-        RoundedCornerShape(
-            topStart = if (isSelf || isGroupHeader) cornerRadius else sharpRadius,
-            topEnd = if (!isSelf || isGroupHeader) cornerRadius else sharpRadius,
-            bottomStart = if (isSelf || isGroupFooter) cornerRadius else sharpRadius,
-            bottomEnd = if (!isSelf || isGroupFooter) cornerRadius else sharpRadius
-        )
+        if (isMediaOnly) {
+            RoundedCornerShape(20.dp)
+        } else {
+            if (isSelf) OutgoingBubbleShape(showTail) else IncomingBubbleShape(showTail)
+        }
     } else RoundedCornerShape(0.dp)
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
                 alpha = animatedProgress.value
@@ -98,12 +104,15 @@ fun ChatBubble(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.85f)
+                .fillMaxWidth(0.9f)
                 .padding(horizontal = 12.dp, vertical = if (showBubbles) 2.dp else 4.dp),
             horizontalAlignment = alignment
         ) {
             Surface(
-                color = if (showBubbles) bubbleColor else Color.Transparent,
+                color = if (showBubbles) {
+                    if (isMediaOnly) Color.Transparent else bubbleColor
+                } else Color.Transparent,
+                border = if (showBubbles && isMediaOnly) androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)) else null,
                 shape = shape,
                 modifier = Modifier
                     .then(
@@ -115,45 +124,49 @@ fun ChatBubble(
                         } else Modifier
                     )
             ) {
-                Column(
-                    modifier = Modifier.padding(
-                        horizontal = if (showBubbles) 12.dp else 0.dp,
-                        vertical = if (showBubbles) 8.dp else 0.dp
-                    ),
-                    horizontalAlignment = alignment
-                ) {
-                    if (mediaContent != null) {
-                        Box(modifier = Modifier.padding(bottom = if (content.text.isNotEmpty()) 6.dp else 0.dp)) {
-                            mediaContent()
-                        }
-                    }
-
-                    val showText = content.text.isNotEmpty() && content.text != "[Media]"
-                    if (showText) {
-                        Text(
-                            text = content,
-                            style = textStyle,
-                            modifier = Modifier.wrapContentWidth()
-                        )
-                    }
-
-                    if (showTimestamp && showBubbles) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text(
-                                text = time,
-                                fontSize = 10.sp,
-                                color = textColor.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.Medium
-                            )
-                            if (isSelf && syncStatus != null) {
-                                ChatStatusIndicator(syncStatus, textColor.copy(alpha = 0.7f))
+                val showText = content.text.isNotEmpty() && content.text != "[Media]"
+                ChatBubbleLayout(
+                    isSelf = isSelf,
+                    showBubbles = showBubbles,
+                    isMediaOnly = isMediaOnly,
+                    showTail = showTail,
+                    tailWidth = 18.dp,
+                    horizontalPadding = if (isMediaOnly) 0.dp else 2.dp,
+                    verticalPadding = if (isMediaOnly) 0.dp else 10.dp,
+                    messageContent = {
+                        Column(horizontalAlignment = alignment) {
+                            if (mediaContent != null) {
+                                Box(modifier = Modifier.padding(bottom = if (showText) 6.dp else 0.dp)) {
+                                    mediaContent()
+                                }
+                            }
+                            if (showText) {
+                                Text(
+                                    text = content,
+                                    style = textStyle,
+                                    modifier = Modifier.wrapContentWidth()
+                                )
                             }
                         }
+                    }
+                )
+            }
+
+            if (showTimestamp && showBubbles) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = time,
+                        fontSize = 10.sp,
+                        color = (if (isDark) Color.White else Color.Black).copy(alpha = 0.5f),
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (isSelf && syncStatus != null) {
+                        ChatStatusIndicator(syncStatus, (if (isDark) Color.White else Color.Black).copy(alpha = 0.5f))
                     }
                 }
             }
@@ -173,6 +186,57 @@ fun ChatBubble(
                         ChatStatusIndicator(syncStatus, textColor.copy(alpha = 0.6f))
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatBubbleLayout(
+    isSelf: Boolean,
+    showBubbles: Boolean,
+    isMediaOnly: Boolean,
+    showTail: Boolean,
+    tailWidth: Dp,
+    horizontalPadding: Dp,
+    verticalPadding: Dp,
+    messageContent: @Composable () -> Unit
+) {
+    Layout(
+        content = {
+            Box(Modifier.layoutId("content")) { messageContent() }
+        }
+    ) { measurables, constraints ->
+        val tw = if (showTail) tailWidth.toPx() else 0f
+        val th = if (showTail) 10.dp.toPx() else 0f
+        val hp = horizontalPadding.toPx()
+        val vp = verticalPadding.toPx()
+
+        // Estimate overhead for semi-circular ends.
+        val estimatedPillDiameter = if (isMediaOnly) 0f else 100f 
+        val overheadX = tw + (if (isMediaOnly) 0f else 2 * hp + estimatedPillDiameter)
+        
+        val contentConstraints = constraints.copy(
+            maxWidth = (constraints.maxWidth - overheadX.toInt()).coerceAtLeast(0)
+        )
+        val contentPlaceable = measurables.find { it.layoutId == "content" }!!.measure(contentConstraints)
+
+        if (!showBubbles) {
+            layout(contentPlaceable.width, contentPlaceable.height) {
+                contentPlaceable.place(0, 0)
+            }
+        } else {
+            val h = contentPlaceable.height + 2 * vp + th
+            val pillRadius = if (isMediaOnly) 0f else (h - th) / 2f
+            
+            // Total width perfectly wraps the text + padding + semi-circles + tail
+            val totalWidth = contentPlaceable.width + tw + (2 * pillRadius) + (2 * hp)
+
+            layout(totalWidth.toInt(), h.toInt()) {
+                val xInPill = hp + pillRadius
+                val contentX = if (isSelf) xInPill else (tw + xInPill)
+                val contentY = if (isSelf) vp else (vp + th)
+                contentPlaceable.placeRelative(contentX.toInt(), contentY.toInt())
             }
         }
     }

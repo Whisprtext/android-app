@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.TextUnit
@@ -75,7 +76,12 @@ fun ConversationListScreen(
     val profileClickOnce = remember { { username: String? -> onProfileClick(username) } }
     val addContactClickOnce = remember { { onAddContactClick() } }
 
-    Scaffold(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { clip = true }
+    ) {
+        Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Surface(
@@ -484,6 +490,7 @@ fun ConversationListScreen(
                 4 -> PlaceholderTabContent("Tracking", Icons.Rounded.LocationOn)
             }
         }
+    }
     }
 }
 

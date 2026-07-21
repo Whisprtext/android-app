@@ -149,9 +149,9 @@ data class ReceiptDto(
 )
 
 data class DeltaSyncDto(
-    val messages: List<MessageDto>,
-    val receipts: List<ReceiptDto>,
-    @SerializedName("deleted_message_ids") val deletedMessageIds: List<String> = emptyList(),
+    val messages: List<MessageDto>? = null,
+    val receipts: List<ReceiptDto>? = null,
+    @SerializedName("deleted_message_ids") val deletedMessageIds: List<String>? = null,
     @SerializedName("current_time") val currentTime: String
 )
 

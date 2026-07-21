@@ -14,8 +14,10 @@ import kotlinx.coroutines.launch
 object StartupInitializer {
     fun initialize(context: Context, database: AppDatabase, scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
-            // 1. Warm up fonts
-            preloadFonts(context)
+            // 1. Warm up fonts - Some platforms prefer this on Main
+            scope.launch(Dispatchers.Main) {
+                preloadFonts(context)
+            }
             
             // 2. Warm up database
             warmupDatabase(database)

@@ -9,7 +9,11 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 
+import android.util.LruCache
+
 object MarkdownParser {
+    private val parseCache = LruCache<String, AnnotatedString>(500)
+
     private val boldStyle = SpanStyle(fontWeight = FontWeight.Bold)
     private val italicStyle = SpanStyle(fontStyle = FontStyle.Italic)
     private val strikeStyle = SpanStyle(textDecoration = TextDecoration.LineThrough)
@@ -24,7 +28,12 @@ object MarkdownParser {
     private val romanRegex = Regex("""^(\s*)([ivxldcmIVXLDCM]+)\.\s+(.+)$""")
 
     fun parse(text: String, hideMarkers: Boolean): AnnotatedString {
-        return buildAnnotatedString {
+        if (text.isEmpty()) return AnnotatedString("")
+        val cacheKey = if (hideMarkers) "h_$text" else "s_$text"
+        val cached = parseCache.get(cacheKey)
+        if (cached != null) return cached
+
+        val result = buildAnnotatedString {
             val lines = text.split('\n')
             lines.forEachIndexed { index, line ->
                 if (index > 0) {
@@ -93,6 +102,8 @@ object MarkdownParser {
                 }
             }
         }
+        parseCache.put(cacheKey, result)
+        return result
     }
 
     private fun AnnotatedString.Builder.parseInternal(

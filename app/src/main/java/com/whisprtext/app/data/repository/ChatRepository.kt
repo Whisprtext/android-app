@@ -1,6 +1,7 @@
 package com.whisprtext.app.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.whisprtext.app.data.local.AppDatabase
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.ConversationEntity
@@ -807,11 +808,13 @@ class ChatRepository @JvmOverloads constructor(
             val delta = apiClient.sync(since)
             val currentUserId = preferencesManager.userId.first()
 
-            if (delta.messages.isNotEmpty()) {
+            Log.d("ChatRepository", "syncDelta: processing delta from network. delta=$delta")
+            val messages = delta?.messages
+            if (messages != null && messages.size > 0) {
                 val localDeviceId = preferencesManager.getDeviceId().orEmpty()
                 val entities = mutableListOf<MessageEntity>()
 
-                for (remote in delta.messages) {
+                for (remote in messages) {
                     // Skip envelopes encrypted for another device (defense in depth;
                     // server already filters by recipient_device_id when device id is set).
                     val target = remote.recipientDeviceId
@@ -866,16 +869,18 @@ class ChatRepository @JvmOverloads constructor(
                 }
             }
 
-            if (delta.receipts.isNotEmpty()) {
-                for (receipt in delta.receipts) {
+            val receipts = delta.receipts
+            if (receipts != null && receipts.isNotEmpty()) {
+                for (receipt in receipts) {
                     if (receipt.userId != currentUserId) {
                         updateMessageStatus(receipt.messageId, receipt.status)
                     }
                 }
             }
 
-            if (delta.deletedMessageIds.isNotEmpty()) {
-                for (id in delta.deletedMessageIds) {
+            val deletedIds = delta.deletedMessageIds
+            if (deletedIds != null && deletedIds.isNotEmpty()) {
+                for (id in deletedIds) {
                     messageDao.deleteById(id)
                 }
             }

@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         val app = application as? WhisprTextApp
+        app?.webSocketManager?.isAppInForeground = true
         app?.chatRepository?.let { repo ->
             repo.isAppInForeground = true
             repo.activeConversationId?.let { activeId ->
@@ -125,7 +126,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        (application as? WhisprTextApp)?.chatRepository?.isAppInForeground = false
+        val app = application as? WhisprTextApp
+        app?.webSocketManager?.isAppInForeground = false
+        app?.chatRepository?.isAppInForeground = false
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -154,6 +157,8 @@ class MainActivity : ComponentActivity() {
         val apiClient = app.apiClient
         val chatRepository = app.chatRepository
         val contactRepository = app.contactRepository
+        
+        app.webSocketManager.markStartupComplete()
 
         setContent {
             val appearanceSettings by preferencesManager.appearanceSettings.collectAsState(initial = com.whisprtext.app.data.model.AppearanceSettings())
@@ -296,26 +301,35 @@ class MainActivity : ComponentActivity() {
                                 enterTransition = {
                                     slideIntoContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                        animationSpec = tween(Motion.MediumDuration2, easing = Motion.StandardEasing)
-                                    ) + fadeIn(animationSpec = tween(Motion.MediumDuration2))
+                                        animationSpec = Motion.screenSlideSpringSpec()
+                                    )
                                 },
                                 exitTransition = {
                                     slideOutOfContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                        animationSpec = tween(Motion.MediumDuration2, easing = Motion.StandardEasing)
-                                    ) + fadeOut(animationSpec = tween(Motion.MediumDuration2))
+                                        animationSpec = Motion.screenSlideSpringSpec(),
+                                        targetOffset = { fullWidth -> -(fullWidth * Motion.ScreenParallaxFactor).toInt() }
+                                    ) + fadeOut(
+                                        animationSpec = Motion.screenSlideSpringSpec(),
+                                        targetAlpha = 0.88f
+                                    )
                                 },
                                 popEnterTransition = {
                                     slideIntoContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                        animationSpec = tween(Motion.MediumDuration2, easing = Motion.StandardEasing)
-                                    ) + fadeIn(animationSpec = tween(Motion.MediumDuration2))
+                                        animationSpec = Motion.screenSlideSpringSpec(),
+                                        initialOffset = { fullWidth -> -(fullWidth * Motion.ScreenParallaxFactor).toInt() }
+                                    ) + fadeIn(
+                                        animationSpec = Motion.screenSlideSpringSpec(),
+                                        initialAlpha = 0.88f
+                                    )
                                 },
                                 popExitTransition = {
                                     slideOutOfContainer(
                                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                        animationSpec = tween(Motion.MediumDuration2, easing = Motion.StandardEasing)
-                                    ) + fadeOut(animationSpec = tween(Motion.MediumDuration2))
+                                        animationSpec = Motion.screenSlideSpringSpec(),
+                                        targetOffset = { fullWidth -> fullWidth }
+                                    )
                                 }
                             ) {
                                 composable(Screen.ConversationList.route) {

@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.whisprtext.app.ui.component.ChatBubble
-import com.whisprtext.app.ui.component.DoodleBorderBackground
 import com.whisprtext.app.ui.theme.AppearancePresets
 import com.whisprtext.app.ui.theme.WhisprTheme
 import com.whisprtext.app.ui.viewmodel.AppearanceViewModel
@@ -105,7 +104,7 @@ fun AppearanceScreen(
 
             // Demo Chat View
             Text("Preview", style = MaterialTheme.typography.titleMedium)
-            DemoChatView(currentTheme, settings.useDoodles, settings.showChatBubbles, settings.doodleStyle, isDark)
+            DemoChatView(currentTheme, settings.showChatBubbles, isDark)
 
             // Background Color Selection
             Text("Theme", style = MaterialTheme.typography.titleMedium)
@@ -147,46 +146,6 @@ fun AppearanceScreen(
                         )
                     }
                 }
-
-                // Doodle Options
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Chat Doodles", style = MaterialTheme.typography.bodyLarge)
-                                Text("Add subtle patterns to background", style = MaterialTheme.typography.bodySmall)
-                            }
-                            Switch(
-                                checked = settings.useDoodles,
-                                onCheckedChange = { viewModel.updateDoodles(it) }
-                            )
-                        }
-
-                        if (settings.useDoodles) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("Doodle Style", style = MaterialTheme.typography.bodyMedium)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                (0..3).forEach { styleIndex ->
-                                    DoodleStyleOption(
-                                        style = styleIndex,
-                                        isSelected = settings.doodleStyle == styleIndex,
-                                        onClick = { viewModel.updateDoodleStyle(styleIndex) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -195,9 +154,7 @@ fun AppearanceScreen(
 @Composable
 fun DemoChatView(
     theme: WhisprTheme,
-    useDoodles: Boolean,
     showChatBubbles: Boolean,
-    doodleStyle: Int,
     isDark: Boolean
 ) {
     val backgroundColor = if (isDark) theme.backgroundColorDark else theme.backgroundColorLight
@@ -217,21 +174,11 @@ fun DemoChatView(
             .then(backgroundModifier)
             .padding(12.dp)
     ) {
-        if (useDoodles) {
-            DoodleBorderBackground(
-                style = doodleStyle,
-                alpha = 0.1f,
-                color = Color.Black.copy(alpha = 0.8f)
-            )
-        }
-
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ChatBubble(
                 content = MarkdownParser.parse("Hey! How do you like this theme?", hideMarkers = true),
                 time = "10:00 AM",
                 isSelf = false,
-                isGroupHeader = true,
-                isGroupFooter = true,
                 theme = theme,
                 isDark = isDark,
                 showBubbles = showChatBubbles
@@ -240,8 +187,6 @@ fun DemoChatView(
                 content = MarkdownParser.parse("It looks amazing! So clean.", hideMarkers = true),
                 time = "10:01 AM",
                 isSelf = true,
-                isGroupHeader = true,
-                isGroupFooter = true,
                 theme = theme,
                 isDark = isDark,
                 showBubbles = showChatBubbles,
@@ -282,29 +227,6 @@ fun ThemeOption(theme: WhisprTheme, isSelected: Boolean, isDark: Boolean, onClic
             text = theme.name,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-        )
-    }
-}
-
-@Composable
-fun DoodleStyleOption(style: Int, isSelected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(50.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable { onClick() }
-            .padding(4.dp)
-    ) {
-        DoodleBorderBackground(
-            style = style,
-            alpha = 0.3f,
-            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

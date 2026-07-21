@@ -44,11 +44,47 @@ class WebSocketManager(
     private var reconnectAttempt = 0
     private var contextRef: android.content.Context? = null
 
+    private var lastServiceStartTimestamp = 0L
+    private var isInitialStartup = true
+
+    /**
+     * Track app foreground state to avoid starting foreground service when not needed.
+     */
+    var isAppInForeground = true
+        set(value) {
+            if (field != value) {
+                field = value
+                Log.d(TAG, "isAppInForeground changed to $value")
+                if (value) {
+                    stopForegroundService()
+                } else if (isConnected) {
+                    startForegroundService()
+                }
+            }
+        }
+
+    fun markStartupComplete() {
+        isInitialStartup = false
+        Log.d(TAG, "markStartupComplete: isInitialStartup set to false")
+        // If we connected during the startup phase while in background, start the service now
+        if (!isAppInForeground && isConnected) {
+            startForegroundService()
+        }
+    }
 
     private val _events = MutableSharedFlow<WebSocketEvent>(extraBufferCapacity = 100)
     val events: SharedFlow<WebSocketEvent> = _events
 
     init {
+        // Auto-clear initial startup flag after a delay to handle cases where the app
+        // starts in the background (e.g. FCM push) and no Activity is ever created.
+        scope.launch {
+            delay(10000)
+            if (isInitialStartup) {
+                Log.d(TAG, "Auto-clearing isInitialStartup after timeout")
+                markStartupComplete()
+            }
+        }
         scope.launch {
             preferencesManager.sessionToken.collect { token ->
                 if (token != null) {
@@ -65,8 +101,16 @@ class WebSocketManager(
     }
 
     private fun startForegroundService() {
+        if (isAppInForeground || isInitialStartup) {
+            Log.d(TAG, "Skipping foreground service start: foreground=$isAppInForeground, startup=$isInitialStartup")
+            return
+        }
         try {
-            contextRef?.let { WebSocketForegroundService.start(it) }
+            Log.d(TAG, "Starting foreground service for keepalive")
+            contextRef?.let { 
+                WebSocketForegroundService.start(it)
+                lastServiceStartTimestamp = System.currentTimeMillis()
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start foreground service", e)
         }
@@ -74,7 +118,22 @@ class WebSocketManager(
 
     private fun stopForegroundService() {
         try {
-            contextRef?.let { WebSocketForegroundService.stop(it) }
+            val timeSinceStart = System.currentTimeMillis() - lastServiceStartTimestamp
+            // If the service was started very recently (e.g. within the last 2 seconds),
+            // delay the stop call to ensure the service has had time to call startForeground().
+            // This prevents ForegroundServiceDidNotStartInTimeException.
+            if (timeSinceStart < 2000) {
+                Log.d(TAG, "Service started too recently ($timeSinceStart ms), delaying stopService")
+                scope.launch {
+                    delay(2000 - timeSinceStart)
+                    if (isAppInForeground) {
+                        Log.d(TAG, "Executing delayed stopService")
+                        contextRef?.let { WebSocketForegroundService.stop(it) }
+                    }
+                }
+            } else {
+                contextRef?.let { WebSocketForegroundService.stop(it) }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to stop foreground service", e)
         }
@@ -91,7 +150,9 @@ class WebSocketManager(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnected = true
                 reconnectAttempt = 0
-                startForegroundService()
+                if (!isAppInForeground) {
+                    startForegroundService()
+                }
                 scope.launch { _events.emit(WebSocketEvent.Connected) }
             }
 

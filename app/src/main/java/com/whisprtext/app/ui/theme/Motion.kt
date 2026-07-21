@@ -5,6 +5,10 @@ import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
+
 object Motion {
     // Durations
     const val ShortDuration1 = 100
@@ -16,10 +20,23 @@ object Motion {
     const val LongDuration3 = 400
     const val LongDuration4 = 500
 
+    // Screen transition durations & factors
+    const val ScreenSlideDuration = 380
+    const val ScreenParallaxFactor = 0.30f
+
     // Easings
     val StandardEasing: Easing = FastOutSlowInEasing
     val DecelerateEasing: Easing = LinearOutSlowInEasing
     val EmphasizedEasing: Easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
     val EmphasizedAccelerateEasing: Easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
     val EmphasizedDecelerateEasing: Easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    
+    // Ultra-smooth frame-rate independent fluid curve for screen transitions across 60Hz - 144Hz
+    val ScreenSlideEasing: Easing = CubicBezierEasing(0.16f, 1.0f, 0.30f, 1.0f)
+
+    // Physics spring for frame-by-frame VSYNC interpolation
+    fun <T> screenSlideSpringSpec(): SpringSpec<T> = spring(
+        stiffness = 380f,
+        dampingRatio = 0.92f
+    )
 }

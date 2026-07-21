@@ -435,7 +435,7 @@ fun ProfileScreen(
                             Spacer(Modifier.width(16.dp))
                             Column {
                                 Text("Appearance", style = MaterialTheme.typography.bodyLarge)
-                                Text("App theme, colors and doodles", style = MaterialTheme.typography.bodySmall)
+                                Text("App theme and colors", style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.weight(1f))
                             Icon(Icons.Default.ChevronRight, contentDescription = null)

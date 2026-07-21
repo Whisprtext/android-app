@@ -10,7 +10,7 @@ import androidx.navigation.NavOptionsBuilder
  */
 class DebouncedNavigator(private val navController: NavController) {
     private var lastNavTime = 0L
-    private val debounceInterval = 500L // ms
+    private val debounceInterval = 300L // ms
 
     fun navigate(route: String, builder: NavOptionsBuilder.() -> Unit = {}) {
         val currentTime = System.currentTimeMillis()

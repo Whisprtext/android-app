@@ -2,19 +2,32 @@ package com.whisprtext.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.text.AnnotatedString
 import com.whisprtext.app.data.local.entity.ConversationEntity
 import com.whisprtext.app.data.local.PreferencesManager
 import com.whisprtext.app.data.local.entity.MessageEntity
 import com.whisprtext.app.data.model.AppearanceSettings
 import com.whisprtext.app.data.repository.ChatRepository
 import com.whisprtext.app.data.repository.ContactRepository
+import com.whisprtext.app.util.MarkdownParser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import com.whisprtext.app.data.remote.model.UserDto
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 
+data class MessageUiModel(
+    val message: MessageEntity,
+    val parsedContent: AnnotatedString,
+    val time: String,
+    val isSelf: Boolean,
+    val isGroupHeader: Boolean,
+    val isGroupFooter: Boolean,
+    val showTimestamp: Boolean
+)
+
 data class ChatUiState(
-    val messages: List<MessageEntity> = emptyList(),
+    val messages: List<MessageUiModel> = emptyList(),
     val contactsMap: Map<String, String> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -34,6 +47,7 @@ class ChatViewModel(
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
     private val _otherUser = MutableStateFlow<UserDto?>(null)
+    private val _userId = MutableStateFlow("")
 
     val uiState: StateFlow<ChatUiState> = combine(
         chatRepository.getMessages(conversationId),
@@ -42,7 +56,8 @@ class ChatViewModel(
         _otherUser,
         _isLoading,
         _error,
-        preferencesManager.appearanceSettings
+        preferencesManager.appearanceSettings,
+        _userId
     ) { flowResults ->
         val messages = flowResults[0] as List<MessageEntity>
         val conversation = flowResults[1] as? ConversationEntity
@@ -51,6 +66,79 @@ class ChatViewModel(
         val isLoading = flowResults[4] as Boolean
         val error = flowResults[5] as? String
         val appearance = flowResults[6] as AppearanceSettings
+        val currentUserId = flowResults[7] as String
+
+        // Transform messages to MessageUiModel
+        val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+        val zoneId = java.time.ZoneId.systemDefault()
+        
+        // 1. Determine which messages show timestamps (chronological processing)
+        val chronological = messages.reversed()
+        val showTimestampIds = mutableSetOf<String>()
+        if (chronological.isNotEmpty()) {
+            var currentBlockSender = chronological[0].senderId
+            var lastMessageTimeInBlock = chronological[0].createdAt
+            var currentBlockCount = 0
+
+            for (i in chronological.indices) {
+                val msg = chronological[i]
+                val timeGap = msg.createdAt - lastMessageTimeInBlock
+                val senderChanged = msg.senderId != currentBlockSender
+                val timeGapExceeded = i > 0 && timeGap >= 300_000
+                val countExceeded = currentBlockCount >= 10
+
+                if (senderChanged || timeGapExceeded || countExceeded) {
+                    if (i > 0) showTimestampIds.add(chronological[i - 1].id)
+                    currentBlockSender = msg.senderId
+                    lastMessageTimeInBlock = msg.createdAt
+                    currentBlockCount = 1
+                } else {
+                    currentBlockCount++
+                    lastMessageTimeInBlock = msg.createdAt
+                }
+            }
+            showTimestampIds.add(chronological.last().id)
+        }
+
+        // 2. Map to UI Model
+        val messageUiModels = messages.mapIndexed { index, message ->
+            val isSelf = message.senderId == currentUserId
+            
+            val isSameSenderAsNext = index < messages.size - 1 &&
+                    messages[index].senderId == messages[index + 1].senderId
+            val isWithinTimeAsNext = index < messages.size - 1 &&
+                    Math.abs(messages[index].createdAt - messages[index + 1].createdAt) < 300_000
+
+            val isSameSenderAsPrev = index > 0 &&
+                    messages[index].senderId == messages[index - 1].senderId
+            val isWithinTimeAsPrev = index > 0 &&
+                    Math.abs(messages[index].createdAt - messages[index - 1].createdAt) < 300_000
+
+            val isGroupHeader = !(isSameSenderAsNext && isWithinTimeAsNext)
+            val isGroupFooter = !(isSameSenderAsPrev && isWithinTimeAsPrev)
+
+            val raw = message.decryptedContent
+            val displayText = when {
+                message.decryptionStatus == "failed" || message.isDecryptionFailed ->
+                    com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+                com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(raw) ->
+                    com.whisprtext.app.crypto.SignalKeyManager.DISPLAY_DECRYPT_FAILED
+                else -> raw
+            }
+
+            MessageUiModel(
+                message = message,
+                parsedContent = MarkdownParser.parse(displayText, hideMarkers = true),
+                time = java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(message.createdAt),
+                    zoneId
+                ).format(timeFormatter),
+                isSelf = isSelf,
+                isGroupHeader = isGroupHeader,
+                isGroupFooter = isGroupFooter,
+                showTimestamp = showTimestampIds.contains(message.id)
+            )
+        }
 
         // Prefer live conversation.avatarUrl (updated when profile is refreshed) over stale otherUser.
         val mergedOther = when {
@@ -71,7 +159,7 @@ class ChatViewModel(
         }
 
         ChatUiState(
-            messages = messages,
+            messages = messageUiModels,
             contactsMap = contactsMap,
             isLoading = isLoading,
             error = error,
@@ -79,14 +167,13 @@ class ChatViewModel(
             otherUser = mergedOther,
             appearanceSettings = appearance
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ChatUiState(isLoading = true)
+        initialValue = ChatUiState(isLoading = false)
     )
 
-    private val _currentUserId = MutableStateFlow("")
-    val currentUserId: StateFlow<String> = _currentUserId
+    val currentUserId: StateFlow<String> = _userId
 
     init {
         chatRepository.activeConversationId = conversationId
@@ -96,7 +183,7 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             preferencesManager.userId.collect { id ->
-                _currentUserId.value = id ?: ""
+                _userId.value = id ?: ""
             }
         }
         viewModelScope.launch {
@@ -148,7 +235,7 @@ class ChatViewModel(
     fun sendMessage(content: String) {
         if (content.isBlank()) return
         viewModelScope.launch {
-            val senderId = _currentUserId.value
+            val senderId = _userId.value
             if (senderId.isNotBlank()) {
                 // Device UUID is resolved inside ChatRepository from PreferencesManager
                 chatRepository.sendMessage(conversationId, content, senderId, "")
@@ -176,7 +263,7 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 _isLoading.value = true
-                val senderId = _currentUserId.value
+                val senderId = _userId.value
                 if (senderId.isNotBlank()) {
                     chatRepository.sendMediaMessage(
                         conversationId = conversationId,

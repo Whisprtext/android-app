@@ -1,7 +1,5 @@
-- [x] Update `AppearanceSettings` data model
-- [x] Update `AppearanceViewModel` with toggle logic
-- [x] Enhance `ChatBubble` component in `MessageBubble.kt` to render bubbles
-- [x] Add "Chat Bubbles" toggle to `AppearanceScreen`
-- [x] Pass `showChatBubbles` setting in `ChatScreen`
-- [x] Refine theme colors in `AppearancePresets` for better contrast
-- [x] Verify changes across all themes and modes
+- [ ] Redesign `IncomingBubbleShape` in `ChatBubbleShapes.kt` (Top-Left tail, organic edges)
+- [ ] Redesign `OutgoingBubbleShape` in `ChatBubbleShapes.kt` (Top-Right tail, organic edges)
+- [ ] Adjust `ChatBubbleLayout` in `MessageBubble.kt` for the new tail positions
+- [ ] Verify symmetry and "hand-drawn" feel
+- [ ] Finalize walkthrough
