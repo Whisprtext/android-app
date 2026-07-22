@@ -27,7 +27,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.WhisprText"
-        android:usesCleartextTraffic="true"
         android:pageSizeCompat="enabled"
         tools:ignore="UnusedAttribute">
 

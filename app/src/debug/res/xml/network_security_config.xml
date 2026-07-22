@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only network security config for local translation model development testing -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Android Emulator host loopback -->
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- Local loopback -->
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <!-- Common local area network subnets for physical device testing -->
+        <domain includeSubdomains="true">192.168.1.25</domain>
+        <domain includeSubdomains="true">192.168.0.1</domain>
+        <domain includeSubdomains="true">10.0.0.1</domain>
+    </domain-config>
+    <!-- Allow cleartext for any local development host in debug builds only -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

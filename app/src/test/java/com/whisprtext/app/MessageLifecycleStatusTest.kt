@@ -40,19 +40,28 @@ class MessageLifecycleStatusTest {
     private val wsEventsFlow = MutableSharedFlow<WebSocketEvent>()
     private lateinit var repository: ChatRepository
 
+    private val outboxDao: com.whisprtext.app.data.local.dao.OutboxDao = mock()
+    private val userProfileDao: com.whisprtext.app.data.local.dao.UserProfileDao = mock()
+
     @Before
     fun setUp() {
         whenever(database.conversationDao()).thenReturn(conversationDao)
         whenever(database.messageDao()).thenReturn(messageDao)
         whenever(database.pendingReceiptDao()).thenReturn(pendingReceiptDao)
+        whenever(database.outboxDao()).thenReturn(outboxDao)
+        whenever(database.userProfileDao()).thenReturn(userProfileDao)
         whenever(networkMonitor.isOnline).thenReturn(isOnlineFlow)
         whenever(webSocketManager.events).thenReturn(wsEventsFlow)
         whenever(preferencesManager.lastSyncTime).thenReturn(flowOf(null))
         whenever(preferencesManager.userId).thenReturn(flowOf("user-current"))
+        whenever(preferencesManager.isTranslationEnabled).thenReturn(flowOf(false))
+        whenever(preferencesManager.preferredTargetLanguage).thenReturn(flowOf("eng_Latn"))
 
         run {
             kotlinx.coroutines.runBlocking {
+                whenever(preferencesManager.getDeviceId()).thenReturn("dev-1")
                 whenever(messageDao.getMessagesBySyncStatus(any())).thenReturn(emptyList())
+                whenever(messageDao.getUnreadReceivedMessages(any())).thenReturn(emptyList())
                 whenever(pendingReceiptDao.getAll()).thenReturn(emptyList())
             }
         }

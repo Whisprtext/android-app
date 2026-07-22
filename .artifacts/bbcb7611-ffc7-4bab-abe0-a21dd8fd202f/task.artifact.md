@@ -1,5 +1,6 @@
-- [x] Update `StickerEmojiPickerBottomSheet.kt` to add rounded corners to the header
-    - [x] Wrap `TabRow` in a `Surface` with `RoundedCornerShape(20.dp)`
-    - [x] Set `TabRow` colors to be transparent
-    - [x] Remove default divider
-- [x] Verify changes visually (via code review/preview if possible)
+- [x] Update `MessageBubble` in `ChatScreen.kt` to support long-click on media content
+    - [x] Add `ExperimentalFoundationApi` and `combinedClickable` imports
+    - [x] Update `AsyncImage` (Image) to use `combinedClickable`
+    - [x] Update `Box` (Video placeholder) to use `combinedClickable`
+- [x] Verify code changes using `analyze_file`
+- [x] Create walkthrough

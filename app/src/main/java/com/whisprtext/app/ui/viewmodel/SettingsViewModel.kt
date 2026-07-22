@@ -7,9 +7,13 @@ import com.whisprtext.app.data.remote.ApiClient
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+import com.whisprtext.app.translation.ModelDownloadState
+import com.whisprtext.app.translation.TranslationModelRepository
+
 class SettingsViewModel(
     private val apiClient: ApiClient,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val translationModelRepository: TranslationModelRepository? = null
 ) : ViewModel() {
 
     private val _username = MutableStateFlow("")
@@ -25,6 +29,16 @@ class SettingsViewModel(
     private val _updateStatus = MutableSharedFlow<String>()
     val updateStatus: SharedFlow<String> = _updateStatus
 
+    val isTranslationEnabled = preferencesManager.isTranslationEnabled
+    val preferredTargetLanguage = preferencesManager.preferredTargetLanguage
+    val autoTranslateUnfamiliar = preferencesManager.autoTranslateUnfamiliar
+    val allowMobileDataDownload = preferencesManager.allowMobileDataDownload
+    val showOriginalBelowTranslation = preferencesManager.showOriginalBelowTranslation
+    val manifestUrl = preferencesManager.manifestUrl
+
+    val modelDownloadState: StateFlow<ModelDownloadState> =
+        translationModelRepository?.downloadState ?: MutableStateFlow(ModelDownloadState.NotDownloaded)
+
     init {
         viewModelScope.launch {
             preferencesManager.username.collect { name ->
@@ -37,6 +51,52 @@ class SettingsViewModel(
             }
         }
         fetchSettings()
+    }
+
+    fun setTranslationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setTranslationEnabled(enabled)
+            if (enabled && translationModelRepository != null) {
+                if (!translationModelRepository.isModelReady()) {
+                    translationModelRepository.downloadAndInstallModel()
+                }
+            }
+        }
+    }
+
+    fun downloadModel() {
+        val repo = translationModelRepository ?: return
+        viewModelScope.launch {
+            repo.downloadAndInstallModel()
+        }
+    }
+
+    fun deleteModel() {
+        val repo = translationModelRepository ?: return
+        viewModelScope.launch {
+            repo.deleteModel()
+            _updateStatus.emit("Translation model deleted")
+        }
+    }
+
+    fun setPreferredTargetLanguage(langCode: String) {
+        viewModelScope.launch { preferencesManager.setPreferredTargetLanguage(langCode) }
+    }
+
+    fun setAutoTranslateUnfamiliar(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setAutoTranslateUnfamiliar(enabled) }
+    }
+
+    fun setAllowMobileDataDownload(allowed: Boolean) {
+        viewModelScope.launch { preferencesManager.setAllowMobileDataDownload(allowed) }
+    }
+
+    fun setShowOriginalBelowTranslation(show: Boolean) {
+        viewModelScope.launch { preferencesManager.setShowOriginalBelowTranslation(show) }
+    }
+
+    fun setManifestUrl(url: String) {
+        viewModelScope.launch { preferencesManager.setManifestUrl(url) }
     }
 
     fun fetchSettings() {

@@ -1,29 +1,27 @@
-# Implementation Plan - Rounded Corners for Emoji/Stickers Header
+# Implementation Plan - Add Delete Option for Image Long-Click
 
-The user wants to make the header background of the emoji/stickers picker rounded, consistent with other rounded UI elements like the top and bottom bars in the app.
+Long-clicking on an image in the chat currently only opens the image (or does nothing if only `clickable` is used without long-click handling). This is because the `clickable` modifier on the image/video container consumes touch events, preventing the parent `ChatBubble`'s long-click listener from firing.
 
-## User Review Required
-
-> [!IMPORTANT]
-> I will apply a `RoundedCornerShape` to the `TabRow` container in the `StickerEmojiPickerBottomSheet`. I'll use a radius consistent with the input bar (24dp) or top bars (20-28dp). I'm proposing 20dp for a balanced look within the bottom sheet.
+This plan will update the media containers in `MessageBubble` to support long-clicks and trigger the same "delete message" dialog used for text messages.
 
 ## Proposed Changes
 
-### [Component Name] UI Components
+### UI Components
 
-#### [MODIFY] [StickerEmojiPickerBottomSheet.kt](file:///C:/Users/nilan/Projects/whisprtext-app/whisprtext/app/src/main/java/com/whisprtext/app/ui/component/StickerEmojiPickerBottomSheet.kt)
+#### [MODIFY] [ChatScreen.kt](file:///C:/Users/nilan/Projects/whisprtext-app/whisprtext/app/src/main/java/com/whisprtext/app/ui/screen/ChatScreen.kt)
 
-- Wrap the `TabRow` in a `Surface` with `RoundedCornerShape(20.dp)`.
-- Set `TabRow`'s `containerColor` to `Color.Transparent` to show the `Surface` background.
-- Remove the default `TabRow` divider for a cleaner look.
-- Adjust padding if necessary to ensure the tabs are well-centered.
+- Add `ExperimentalFoundationApi` and `combinedClickable` imports.
+- Annotate `MessageBubble` composable with `@OptIn(ExperimentalFoundationApi::class)`.
+- Replace `clickable` with `combinedClickable` for both `AsyncImage` (images) and the `Box` (video placeholders).
+- Pass the `onLongClick` callback to these `combinedClickable` modifiers.
 
 ## Verification Plan
 
-### Automated Tests
-- N/A (UI visual change)
-
 ### Manual Verification
-- Deploy the app and open the emoji/stickers picker (usually from the chat screen).
-- Verify that the header (Tabs for Emojis/Stickers) now has rounded corners.
-- Check that it looks consistent with other rounded elements in the app.
+1. Open a chat with images or videos.
+2. Long-click on an image.
+3. Verify that the "Delete message?" dialog appears.
+4. Verify that clicking on the image still opens the fullscreen preview.
+5. Long-click on a video placeholder.
+6. Verify that the "Delete message?" dialog appears.
+7. Verify that clicking on the video placeholder still triggers the video player.

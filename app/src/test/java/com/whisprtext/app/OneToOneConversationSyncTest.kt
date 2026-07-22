@@ -50,6 +50,8 @@ class OneToOneConversationSyncTest {
         whenever(webSocketManager.events).thenReturn(kotlinx.coroutines.flow.MutableSharedFlow())
         whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-current"))
         whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
+        whenever(preferencesManager.isTranslationEnabled).thenReturn(kotlinx.coroutines.flow.flowOf(false))
+        whenever(preferencesManager.preferredTargetLanguage).thenReturn(kotlinx.coroutines.flow.flowOf("eng_Latn"))
         repository = ChatRepository(db, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
 

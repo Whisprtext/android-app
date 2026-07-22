@@ -40,6 +40,14 @@ class PreferencesManager(private val context: Context) {
         private val KEY_APPEARANCE_SETTINGS = stringPreferencesKey("appearance_settings")
         private val KEY_GRADIENT_START = intPreferencesKey("gradient_start")
         private val KEY_GRADIENT_END = intPreferencesKey("gradient_end")
+
+        // Translation preferences
+        private val KEY_TRANSLATION_ENABLED = androidx.datastore.preferences.core.booleanPreferencesKey("translation_enabled")
+        private val KEY_PREFERRED_TARGET_LANG = stringPreferencesKey("preferred_target_lang")
+        private val KEY_AUTO_TRANSLATE_UNFAMILIAR = androidx.datastore.preferences.core.booleanPreferencesKey("auto_translate_unfamiliar")
+        private val KEY_ALLOW_MOBILE_DATA_DOWNLOAD = androidx.datastore.preferences.core.booleanPreferencesKey("allow_mobile_data_download")
+        private val KEY_SHOW_ORIGINAL_BELOW = androidx.datastore.preferences.core.booleanPreferencesKey("show_original_below_translation")
+        private val KEY_MANIFEST_URL = stringPreferencesKey("translation_manifest_url")
     }
 
     private val gson = Gson()
@@ -337,5 +345,66 @@ class PreferencesManager(private val context: Context) {
     suspend fun saveSecureValue(key: String, value: String) {
         val prefKey = stringPreferencesKey(key)
         context.dataStore.edit { it[prefKey] = value }
+    }
+
+    // Translation settings flows and methods
+    val isTranslationEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TRANSLATION_ENABLED] ?: false
+    }.distinctUntilChanged()
+
+    val preferredTargetLanguage: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PREFERRED_TARGET_LANG] ?: "eng_Latn"
+    }.distinctUntilChanged()
+
+    val autoTranslateUnfamiliar: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_AUTO_TRANSLATE_UNFAMILIAR] ?: false
+    }.distinctUntilChanged()
+
+    val allowMobileDataDownload: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_ALLOW_MOBILE_DATA_DOWNLOAD] ?: false
+    }.distinctUntilChanged()
+
+    val showOriginalBelowTranslation: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_SHOW_ORIGINAL_BELOW] ?: true
+    }.distinctUntilChanged()
+
+    val manifestUrl: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_MANIFEST_URL] ?: com.whisprtext.app.BuildConfig.TRANSLATION_MANIFEST_URL
+    }.distinctUntilChanged()
+
+    suspend fun setTranslationEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_TRANSLATION_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setPreferredTargetLanguage(langCode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_PREFERRED_TARGET_LANG] = langCode
+        }
+    }
+
+    suspend fun setAutoTranslateUnfamiliar(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_AUTO_TRANSLATE_UNFAMILIAR] = enabled
+        }
+    }
+
+    suspend fun setAllowMobileDataDownload(allowed: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_ALLOW_MOBILE_DATA_DOWNLOAD] = allowed
+        }
+    }
+
+    suspend fun setShowOriginalBelowTranslation(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_SHOW_ORIGINAL_BELOW] = show
+        }
+    }
+
+    suspend fun setManifestUrl(url: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_MANIFEST_URL] = url
+        }
     }
 }

@@ -20,10 +20,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "TRANSLATION_MANIFEST_URL", "\"http://10.0.2.2:8000/translation-manifest.json\"")
+        }
         release {
             optimization {
                 enable = false
             }
+            buildConfigField("String", "TRANSLATION_MANIFEST_URL", "\"https://cdn.whisprtext.app/translation-manifest.json\"")
         }
     }
     compileOptions {
@@ -32,6 +36,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         jniLibs {
@@ -41,6 +46,9 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                it.maxHeapSize = "2048m"
+            }
         }
     }
 }
@@ -85,11 +93,13 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.signal.protocol)
     implementation(libs.androidx.security.crypto)
+    implementation(libs.onnxruntime.android)
 
 
 
 
     testImplementation(libs.junit)
+    testImplementation(libs.onnxruntime)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)

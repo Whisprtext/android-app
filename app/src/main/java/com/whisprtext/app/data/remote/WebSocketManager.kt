@@ -47,6 +47,14 @@ class WebSocketManager(
     private var lastServiceStartTimestamp = 0L
     private var isInitialStartup = true
 
+    private fun logD(tag: String, msg: String) {
+        try { Log.d(tag, msg) } catch (_: Throwable) {}
+    }
+
+    private fun logW(tag: String, msg: String, t: Throwable? = null) {
+        try { if (t != null) Log.w(tag, msg, t) else Log.w(tag, msg) } catch (_: Throwable) {}
+    }
+
     /**
      * Track app foreground state to avoid starting foreground service when not needed.
      */
@@ -54,7 +62,7 @@ class WebSocketManager(
         set(value) {
             if (field != value) {
                 field = value
-                Log.d(TAG, "isAppInForeground changed to $value")
+                logD(TAG, "isAppInForeground changed to $value")
                 if (value) {
                     stopForegroundService()
                 } else if (isConnected) {
@@ -65,7 +73,7 @@ class WebSocketManager(
 
     fun markStartupComplete() {
         isInitialStartup = false
-        Log.d(TAG, "markStartupComplete: isInitialStartup set to false")
+        logD(TAG, "markStartupComplete: isInitialStartup set to false")
         // If we connected during the startup phase while in background, start the service now
         if (!isAppInForeground && isConnected) {
             startForegroundService()
@@ -81,7 +89,7 @@ class WebSocketManager(
         scope.launch {
             delay(10000)
             if (isInitialStartup) {
-                Log.d(TAG, "Auto-clearing isInitialStartup after timeout")
+                logD(TAG, "Auto-clearing isInitialStartup after timeout")
                 markStartupComplete()
             }
         }
@@ -102,17 +110,17 @@ class WebSocketManager(
 
     private fun startForegroundService() {
         if (isAppInForeground || isInitialStartup) {
-            Log.d(TAG, "Skipping foreground service start: foreground=$isAppInForeground, startup=$isInitialStartup")
+            logD(TAG, "Skipping foreground service start: foreground=$isAppInForeground, startup=$isInitialStartup")
             return
         }
         try {
-            Log.d(TAG, "Starting foreground service for keepalive")
+            logD(TAG, "Starting foreground service for keepalive")
             contextRef?.let { 
                 WebSocketForegroundService.start(it)
                 lastServiceStartTimestamp = System.currentTimeMillis()
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to start foreground service", e)
+            logW(TAG, "Failed to start foreground service", e)
         }
     }
 
@@ -123,11 +131,11 @@ class WebSocketManager(
             // delay the stop call to ensure the service has had time to call startForeground().
             // This prevents ForegroundServiceDidNotStartInTimeException.
             if (timeSinceStart < 2000) {
-                Log.d(TAG, "Service started too recently ($timeSinceStart ms), delaying stopService")
+                logD(TAG, "Service started too recently ($timeSinceStart ms), delaying stopService")
                 scope.launch {
                     delay(2000 - timeSinceStart)
                     if (isAppInForeground) {
-                        Log.d(TAG, "Executing delayed stopService")
+                        logD(TAG, "Executing delayed stopService")
                         contextRef?.let { WebSocketForegroundService.stop(it) }
                     }
                 }
@@ -135,7 +143,7 @@ class WebSocketManager(
                 contextRef?.let { WebSocketForegroundService.stop(it) }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to stop foreground service", e)
+            logW(TAG, "Failed to stop foreground service", e)
         }
     }
 

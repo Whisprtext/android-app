@@ -1,0 +1,3 @@
+- `[x]` Update `ChatBubble` in `MessageBubble.kt` to support `footerContent`
+- `[x]` Update `ChatScreen.kt` to move translation UI next to timestamp
+- `[x]` Verify UI and functionality

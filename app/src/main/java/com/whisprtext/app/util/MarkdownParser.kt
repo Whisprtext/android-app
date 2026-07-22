@@ -9,10 +9,14 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 
-import android.util.LruCache
+import java.util.LinkedHashMap
 
 object MarkdownParser {
-    private val parseCache = LruCache<String, AnnotatedString>(500)
+    private val parseCache = object : LinkedHashMap<String, AnnotatedString>(100, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, AnnotatedString>?): Boolean {
+            return size > 500
+        }
+    }
 
     private val boldStyle = SpanStyle(fontWeight = FontWeight.Bold)
     private val italicStyle = SpanStyle(fontStyle = FontStyle.Italic)

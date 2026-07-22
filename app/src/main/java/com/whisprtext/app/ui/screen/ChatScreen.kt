@@ -21,6 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -48,6 +50,7 @@ import com.whisprtext.app.ui.theme.Motion
 import com.whisprtext.app.ui.viewmodel.ChatViewModel
 import com.whisprtext.app.ui.viewmodel.ChatUiState
 import com.whisprtext.app.ui.viewmodel.MessageUiModel
+import com.whisprtext.app.ui.viewmodel.MessageTranslationState
 import com.whisprtext.app.util.ContactHelper
 import com.whisprtext.app.util.MarkdownParser
 import com.whisprtext.app.data.model.ThemeMode
@@ -359,9 +362,13 @@ fun ChatScreen(
                                         onLongClick = { messageToDelete = model.message },
                                         shouldAnimate = shouldAnimate,
                                         onAnimationComplete = { hasAnimated = true },
-                                        modifier = Modifier
-                                            .animateItem(),
-                                        onDownloadMedia = { viewModel.getDecryptedFilePath(it) }
+                                        modifier = Modifier.animateItem(),
+                                        onDownloadMedia = { viewModel.getDecryptedFilePath(it) },
+                                        onTranslateClick = { viewModel.translateMessage(it) },
+                                        onToggleShowOriginal = { viewModel.toggleShowOriginal(it) },
+                                        onDownloadModelClick = { viewModel.downloadTranslationModel() },
+                                        isTranslationEnabled = uiState.isTranslationEnabled,
+                                        modelDownloadState = uiState.modelDownloadState
                                     )
                                 }
                             }
@@ -706,6 +713,7 @@ fun ChatInputBar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     uiModel: MessageUiModel,
@@ -716,7 +724,12 @@ fun MessageBubble(
     modifier: Modifier = Modifier,
     shouldAnimate: Boolean = false,
     onAnimationComplete: (() -> Unit)? = null,
-    onDownloadMedia: (suspend (MessageEntity) -> String?)? = null
+    onDownloadMedia: (suspend (MessageEntity) -> String?)? = null,
+    onTranslateClick: ((String) -> Unit)? = null,
+    onToggleShowOriginal: ((String) -> Unit)? = null,
+    onDownloadModelClick: (() -> Unit)? = null,
+    isTranslationEnabled: Boolean = true,
+    modelDownloadState: com.whisprtext.app.translation.ModelDownloadState = com.whisprtext.app.translation.ModelDownloadState.NotDownloaded
 ) {
     val message = uiModel.message
     val context = LocalContext.current
@@ -742,20 +755,35 @@ fun MessageBubble(
                     AsyncImage(
                         model = File(path),
                         contentDescription = "Decrypted photo",
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).clip(RoundedCornerShape(8.dp)).clickable { fullscreenMediaPath = path },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .combinedClickable(
+                                onClick = { fullscreenMediaPath = path },
+                                onLongClick = onLongClick
+                            ),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.6f)).clickable {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(Uri.fromFile(File(path)), message.mimeType ?: "video/mp4")
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                context.startActivity(intent)
-                            } catch (e: Exception) { }
-                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .combinedClickable(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(Uri.fromFile(File(path)), message.mimeType ?: "video/mp4")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) { }
+                                },
+                                onLongClick = onLongClick
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -780,23 +808,103 @@ fun MessageBubble(
         }
     } else null
 
-    ChatBubble(
-        content = uiModel.parsedContent,
-        time = uiModel.time,
-        isSelf = uiModel.isSelf,
-        theme = theme,
-        isDark = isDark,
-        showBubbles = showBubbles,
-        syncStatus = message.syncStatus,
-        showTimestamp = uiModel.showTimestamp,
-        shouldAnimate = shouldAnimate,
-        onAnimationComplete = onAnimationComplete,
-        onLongClick = onLongClick,
-        mediaContent = mediaContent,
-        mimeType = message.mimeType,
-        attachmentUrl = message.attachmentUrl ?: message.localFilePath,
-        modifier = modifier
-    )
+    // Determine displayed content based on translation state
+    val translationState = uiModel.translationState
+    val displayParsedContent = remember(uiModel.parsedContent, translationState) {
+        if (translationState is MessageTranslationState.Translated && !translationState.showOriginal) {
+            com.whisprtext.app.util.MarkdownParser.parse(translationState.translatedText, hideMarkers = true)
+        } else {
+            uiModel.parsedContent
+        }
+    }
+
+    Column(modifier = modifier) {
+        ChatBubble(
+            content = displayParsedContent,
+            time = uiModel.time,
+            isSelf = uiModel.isSelf,
+            theme = theme,
+            isDark = isDark,
+            showBubbles = showBubbles,
+            syncStatus = message.syncStatus,
+            showTimestamp = uiModel.showTimestamp,
+            shouldAnimate = shouldAnimate,
+            onAnimationComplete = onAnimationComplete,
+            onLongClick = onLongClick,
+            mediaContent = mediaContent,
+            mimeType = message.mimeType,
+            attachmentUrl = message.attachmentUrl ?: message.localFilePath,
+            modifier = Modifier.fillMaxWidth(),
+            footerContent = {
+                if (!uiModel.isSelf && !message.decryptedContent.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    when (translationState) {
+                        is MessageTranslationState.None -> {
+                            Text(
+                                text = "translate",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { onTranslateClick?.invoke(message.id) }
+                            )
+                        }
+                        is MessageTranslationState.Translating -> {
+                            CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.2.dp)
+                        }
+                        is MessageTranslationState.Translated -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (!translationState.showOriginal) {
+                                    val srcLangName = com.whisprtext.app.translation.LanguageCodeMapper.getDisplayNameForNllbCode(translationState.sourceLanguage)
+                                    Text(
+                                        text = "translated from $srcLangName • ",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Text(
+                                    text = if (translationState.showOriginal) "translate" else "original",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.clickable { onToggleShowOriginal?.invoke(message.id) }
+                                )
+                            }
+                        }
+                        is MessageTranslationState.ModelRequired -> {
+                            Text(
+                                text = "download model",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.clickable { onDownloadModelClick?.invoke() }
+                            )
+                        }
+                        is MessageTranslationState.Error -> {
+                            Text(
+                                text = "retry",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.clickable { onTranslateClick?.invoke(message.id) }
+                            )
+                        }
+                        is MessageTranslationState.Skipped -> {
+                            Text(
+                                text = "translate",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clickable { onTranslateClick?.invoke(message.id) }
+                            )
+                        }
+                        is MessageTranslationState.LanguageUncertain -> {
+                            Text(
+                                text = "Language uncertain. Choose language",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.clickable { onTranslateClick?.invoke(message.id) }
+                            )
+                        }
+                    }
+                }
+            }
+        )
+    }
 
     fullscreenMediaPath?.let { path ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { fullscreenMediaPath = null }) {

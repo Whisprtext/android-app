@@ -51,7 +51,8 @@ fun ChatBubble(
     onLongClick: (() -> Unit)? = null,
     mediaContent: @Composable (() -> Unit)? = null,
     mimeType: String? = null,
-    attachmentUrl: String? = null
+    attachmentUrl: String? = null,
+    footerContent: @Composable RowScope.() -> Unit = {}
 ) {
     val context = LocalContext.current
     val reducedMotion = remember { AccessibilityHelper.isReducedMotionEnabled(context) }
@@ -230,6 +231,7 @@ fun ChatBubble(
                     if (isSelf && syncStatus != null) {
                         ChatStatusIndicator(syncStatus, (if (isDark) Color.White else Color.Black).copy(alpha = 0.5f))
                     }
+                    footerContent()
                 }
             }
 
@@ -246,6 +248,7 @@ fun ChatBubble(
                     if (isSelf && syncStatus != null) {
                         ChatStatusIndicator(syncStatus, textColor.copy(alpha = 0.6f))
                     }
+                    footerContent()
                 }
             }
         }

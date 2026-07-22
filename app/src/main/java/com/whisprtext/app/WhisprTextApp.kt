@@ -47,6 +47,18 @@ class WhisprTextApp : Application() {
     val chatRepository: ChatRepository by lazy {
         ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager, applicationContext)
     }
+    val translationModelRepository: com.whisprtext.app.translation.TranslationModelRepository by lazy {
+        com.whisprtext.app.translation.TranslationModelRepository(applicationContext, preferencesManager)
+    }
+    val translationEngine: com.whisprtext.app.translation.TranslationEngine by lazy {
+        com.whisprtext.app.translation.NllbTranslationEngine(applicationContext)
+    }
+    val translationRepository: com.whisprtext.app.translation.TranslationRepository by lazy {
+        com.whisprtext.app.translation.TranslationRepository(
+            translationEngine = translationEngine,
+            translationDao = database.translationDao()
+        )
+    }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -70,6 +82,7 @@ class WhisprTextApp : Application() {
                 val db = database
                 val repo = chatRepository
                 contactRepository.loadContacts()
+                translationModelRepository.checkModelInstalledStatus()
                 
                 // General startup initialization (fonts, database warmup, images)
                 StartupInitializer.initialize(applicationContext, db, this)

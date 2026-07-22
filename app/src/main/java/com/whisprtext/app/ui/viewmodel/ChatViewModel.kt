@@ -16,6 +16,26 @@ import kotlinx.coroutines.launch
 import com.whisprtext.app.data.remote.model.UserDto
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 
+import com.whisprtext.app.translation.ModelDownloadState
+import com.whisprtext.app.translation.TranslationModelRepository
+import com.whisprtext.app.translation.TranslationRepository
+import com.whisprtext.app.translation.TranslationResult
+
+sealed class MessageTranslationState {
+    object None : MessageTranslationState()
+    object Translating : MessageTranslationState()
+    data class Translated(
+        val translatedText: String,
+        val sourceLanguage: String,
+        val targetLanguage: String,
+        val showOriginal: Boolean = false
+    ) : MessageTranslationState()
+    data class Error(val message: String) : MessageTranslationState()
+    object ModelRequired : MessageTranslationState()
+    data class Skipped(val reason: String) : MessageTranslationState()
+    object LanguageUncertain : MessageTranslationState()
+}
+
 data class MessageUiModel(
     val message: MessageEntity,
     val parsedContent: AnnotatedString,
@@ -24,7 +44,8 @@ data class MessageUiModel(
     val isGroupHeader: Boolean,
     val isGroupFooter: Boolean,
     val isSameSenderAsNext: Boolean,
-    val showTimestamp: Boolean
+    val showTimestamp: Boolean,
+    val translationState: MessageTranslationState = MessageTranslationState.None
 )
 
 data class ChatUiState(
@@ -34,7 +55,10 @@ data class ChatUiState(
     val error: String? = null,
     val conversation: ConversationEntity? = null,
     val otherUser: UserDto? = null,
-    val appearanceSettings: AppearanceSettings = AppearanceSettings()
+    val appearanceSettings: AppearanceSettings = AppearanceSettings(),
+    val isTranslationEnabled: Boolean = false,
+    val preferredTargetLanguage: String = "eng_Latn",
+    val modelDownloadState: ModelDownloadState = ModelDownloadState.NotDownloaded
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -42,8 +66,13 @@ class ChatViewModel(
     val conversationId: String,
     private val chatRepository: ChatRepository,
     private val contactRepository: ContactRepository,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val translationRepository: TranslationRepository? = null,
+    private val translationModelRepository: TranslationModelRepository? = null
 ) : ViewModel() {
+
+    private val _translationStateMap = MutableStateFlow<Map<String, MessageTranslationState>>(emptyMap())
+    private val _activeTranslationJobs = mutableSetOf<String>()
 
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
@@ -58,7 +87,11 @@ class ChatViewModel(
         _isLoading,
         _error,
         preferencesManager.appearanceSettings,
-        _userId
+        _userId,
+        _translationStateMap,
+        preferencesManager.isTranslationEnabled,
+        preferencesManager.preferredTargetLanguage,
+        translationModelRepository?.downloadState ?: MutableStateFlow(ModelDownloadState.NotDownloaded)
     ) { flowResults ->
         val messages = flowResults[0] as List<MessageEntity>
         val conversation = flowResults[1] as? ConversationEntity
@@ -68,10 +101,13 @@ class ChatViewModel(
         val error = flowResults[5] as? String
         val appearance = flowResults[6] as AppearanceSettings
         val currentUserId = flowResults[7] as String
+        val translationStates = flowResults[8] as Map<String, MessageTranslationState>
+        val isTranslationEnabled = flowResults[9] as Boolean
+        val targetLang = flowResults[10] as String
+        val dlState = flowResults[11] as ModelDownloadState
 
-        val messageUiModels = transformMessagesToUiModels(messages, currentUserId)
+        val messageUiModels = transformMessagesToUiModels(messages, currentUserId, translationStates)
 
-        // Prefer live conversation.avatarUrl (updated when profile is refreshed) over stale otherUser.
         val mergedOther = when {
             otherUser == null && conversation?.username != null -> UserDto(
                 id = "",
@@ -96,7 +132,10 @@ class ChatViewModel(
             error = error,
             conversation = conversation,
             otherUser = mergedOther,
-            appearanceSettings = appearance
+            appearanceSettings = appearance,
+            isTranslationEnabled = isTranslationEnabled,
+            preferredTargetLanguage = targetLang,
+            modelDownloadState = dlState
         )
     }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
@@ -232,10 +271,100 @@ class ChatViewModel(
         }
     }
 
+    fun translateMessage(messageId: String) {
+        val repo = translationRepository ?: return
+        val modelRepo = translationModelRepository
+        val state = uiState.value
+
+        if (_activeTranslationJobs.contains(messageId)) return
+
+        viewModelScope.launch {
+            if (modelRepo != null && !modelRepo.isModelReady()) {
+                _translationStateMap.update { current ->
+                    current + (messageId to MessageTranslationState.ModelRequired)
+                }
+                return@launch
+            }
+
+            _activeTranslationJobs.add(messageId)
+            _translationStateMap.update { current ->
+                current + (messageId to MessageTranslationState.Translating)
+            }
+
+            val msgUi = state.messages.firstOrNull { it.message.id == messageId }
+            if (msgUi == null) {
+                _activeTranslationJobs.remove(messageId)
+                return@launch
+            }
+
+            val rawText = msgUi.message.decryptedContent
+            if (rawText.isBlank() || msgUi.message.decryptionStatus == "failed" || msgUi.message.isDecryptionFailed || com.whisprtext.app.crypto.SignalKeyManager.isLikelyCiphertext(rawText)) {
+                _activeTranslationJobs.remove(messageId)
+                _translationStateMap.update { current ->
+                    current + (messageId to MessageTranslationState.Skipped("Cannot translate encrypted text"))
+                }
+                return@launch
+            }
+
+            val result = repo.getOrTranslateMessage(
+                messageId = messageId,
+                text = rawText,
+                targetLanguage = state.preferredTargetLanguage
+            )
+
+            _activeTranslationJobs.remove(messageId)
+            val logVal = when (result) {
+                is TranslationResult.Success -> result.translatedText
+                is TranslationResult.Skipped -> "Skipped: ${result.reason}"
+                is TranslationResult.Error -> "Error: ${result.message}"
+            }
+            try { android.util.Log.i("ChatViewModel", "[ViewModelResult]\nmessageId=$messageId\ntranslation=$logVal") } catch (_: Throwable) { println("INFO: [ChatViewModel] [ViewModelResult]\nmessageId=$messageId\ntranslation=$logVal") }
+
+            _translationStateMap.update { current ->
+                val newState = when (result) {
+                    is TranslationResult.Success -> MessageTranslationState.Translated(
+                        translatedText = result.translatedText,
+                        sourceLanguage = result.sourceLanguage,
+                        targetLanguage = result.targetLanguage,
+                        showOriginal = false
+                    )
+                    is TranslationResult.Skipped -> {
+                        if (result.reason.contains("Ambiguous", ignoreCase = true) || result.reason.contains("uncertain", ignoreCase = true)) {
+                            MessageTranslationState.LanguageUncertain
+                        } else {
+                            MessageTranslationState.Skipped(result.reason)
+                        }
+                    }
+                    is TranslationResult.Error -> MessageTranslationState.Error(result.message)
+                }
+                current + (messageId to newState)
+            }
+        }
+    }
+
+    fun toggleShowOriginal(messageId: String) {
+        _translationStateMap.update { current ->
+            val existing = current[messageId]
+            if (existing is MessageTranslationState.Translated) {
+                current + (messageId to existing.copy(showOriginal = !existing.showOriginal))
+            } else {
+                current
+            }
+        }
+    }
+
+    fun downloadTranslationModel() {
+        val modelRepo = translationModelRepository ?: return
+        viewModelScope.launch {
+            modelRepo.downloadAndInstallModel()
+        }
+    }
+
     companion object {
         fun transformMessagesToUiModels(
             messages: List<MessageEntity>,
-            currentUserId: String
+            currentUserId: String,
+            translationStates: Map<String, MessageTranslationState> = emptyMap()
         ): List<MessageUiModel> {
             val timeFormatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
             val zoneId = java.time.ZoneId.systemDefault()
@@ -292,6 +421,11 @@ class ChatViewModel(
                     else -> raw
                 }
 
+                val tState = translationStates[message.id] ?: MessageTranslationState.None
+                if (tState is MessageTranslationState.Translated) {
+                    try { android.util.Log.i("ChatViewModel", "[ComposeState]\nmessageId=${message.id}\ndisplayedTranslation=${tState.translatedText}") } catch (_: Throwable) {}
+                }
+
                 MessageUiModel(
                     message = message,
                     parsedContent = MarkdownParser.parse(displayText, hideMarkers = true),
@@ -303,7 +437,8 @@ class ChatViewModel(
                     isGroupHeader = isGroupHeader,
                     isGroupFooter = isGroupFooter,
                     isSameSenderAsNext = isSameSenderAsNext,
-                    showTimestamp = showTimestampIds.contains(message.id)
+                    showTimestamp = showTimestampIds.contains(message.id),
+                    translationState = tState
                 )
             }
         }

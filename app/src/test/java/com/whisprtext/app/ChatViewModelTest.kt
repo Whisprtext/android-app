@@ -34,10 +34,13 @@ class ChatViewModelTest {
         whenever(preferencesManager.appearanceSettings).thenReturn(
             flowOf(com.whisprtext.app.data.model.AppearanceSettings())
         )
+        whenever(preferencesManager.isTranslationEnabled).thenReturn(flowOf(false))
+        whenever(preferencesManager.preferredTargetLanguage).thenReturn(flowOf("eng_Latn"))
         whenever(contactRepository.contactsMap).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(emptyMap()))
         val dummyMessages = listOf(
             MessageEntity("msg-1", "conv-1", "user-123", "dev-1", "Hello", 1000L, "sent")
         )
+        whenever(chatRepository.getCachedMessages(any())).thenReturn(emptyList())
         whenever(chatRepository.getMessages("conv-1")).thenReturn(flowOf(dummyMessages))
         whenever(chatRepository.getConversationFlow("conv-1")).thenReturn(flowOf(null))
         whenever(chatRepository.observeProfileByUsername(any())).thenReturn(flowOf(null))

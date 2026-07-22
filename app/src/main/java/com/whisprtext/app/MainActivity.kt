@@ -330,10 +330,17 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
-                                composable(Screen.Chat.route) { backStackEntry ->
+                                 composable(Screen.Chat.route) { backStackEntry ->
                                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
                                     val chatViewModel = viewModelFactory {
-                                        ChatViewModel(conversationId, chatRepository, contactRepository, preferencesManager)
+                                        ChatViewModel(
+                                            conversationId,
+                                            chatRepository,
+                                            contactRepository,
+                                            preferencesManager,
+                                            app.translationRepository,
+                                            app.translationModelRepository
+                                        )
                                     }
                                     ChatScreen(
                                         viewModel = chatViewModel,
@@ -348,7 +355,11 @@ class MainActivity : ComponentActivity() {
 
                                 composable(Screen.Settings.route) {
                                     val settingsViewModel = viewModelFactory {
-                                        SettingsViewModel(apiClient, preferencesManager)
+                                        SettingsViewModel(
+                                            apiClient,
+                                            preferencesManager,
+                                            app.translationModelRepository
+                                        )
                                     }
                                     SettingsScreen(
                                         viewModel = settingsViewModel,

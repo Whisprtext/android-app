@@ -33,18 +33,26 @@ class ChatRepositoryTest {
     private val preferencesManager: com.whisprtext.app.data.local.PreferencesManager = mock()
     private lateinit var repository: ChatRepository
 
+    private val outboxDao: com.whisprtext.app.data.local.dao.OutboxDao = mock()
+    private val userProfileDao: com.whisprtext.app.data.local.dao.UserProfileDao = mock()
+
     @Before
     fun setUp() {
         whenever(database.conversationDao()).thenReturn(conversationDao)
         whenever(database.messageDao()).thenReturn(messageDao)
         whenever(database.pendingReceiptDao()).thenReturn(pendingReceiptDao)
-        whenever(networkMonitor.isOnline).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(false))
+        whenever(database.outboxDao()).thenReturn(outboxDao)
+        whenever(database.userProfileDao()).thenReturn(userProfileDao)
+        whenever(networkMonitor.isOnline).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(true))
         whenever(webSocketManager.events).thenReturn(kotlinx.coroutines.flow.MutableSharedFlow())
         whenever(preferencesManager.userId).thenReturn(kotlinx.coroutines.flow.flowOf("user-123"))
         whenever(preferencesManager.lastSyncTime).thenReturn(kotlinx.coroutines.flow.flowOf(null))
+        whenever(preferencesManager.isTranslationEnabled).thenReturn(kotlinx.coroutines.flow.flowOf(false))
+        whenever(preferencesManager.preferredTargetLanguage).thenReturn(kotlinx.coroutines.flow.flowOf("eng_Latn"))
         kotlinx.coroutines.runBlocking {
             whenever(pendingReceiptDao.getAll()).thenReturn(emptyList())
             whenever(messageDao.getMessagesBySyncStatus(any())).thenReturn(emptyList())
+            whenever(messageDao.getUnreadReceivedMessages(any())).thenReturn(emptyList())
         }
         repository = ChatRepository(database, apiClient, webSocketManager, networkMonitor, preferencesManager)
     }
